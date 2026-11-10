@@ -1,0 +1,213 @@
+{
+  "name": "CS 440 – Intro to Software Engineering",
+  "scheme": "points",
+  "displayDecimals": 1,
+  "scale": [
+    {
+      "letter": "A",
+      "min": 90
+    },
+    {
+      "letter": "B",
+      "min": 80
+    },
+    {
+      "letter": "C",
+      "min": 70
+    },
+    {
+      "letter": "D",
+      "min": 60
+    },
+    {
+      "letter": "F",
+      "min": 0
+    }
+  ],
+  "notes": "Each Blackboard column is scaled to its syllabus point value. The 12 points for Weeklies, Reviews, Grammatical, OCL and Class Participation are all at full credit; the PDF pins down their total (67 possible) but not the exact split between Weeklies and Reviews, which doesn't change the grade. Attendance and the midterm/review sub-scores are informational only. Syllabus says letter breaks will be close to 90/80/70/60.",
+  "categories": [
+    {
+      "name": "Individual Work",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Attendance %",
+          "score": 100,
+          "outOf": 100,
+          "excluded": true,
+          "note": "Informational"
+        },
+        {
+          "name": "Midterm MC",
+          "score": 32,
+          "outOf": 100,
+          "excluded": true,
+          "note": "Part of Midterm"
+        },
+        {
+          "name": "Midterm Non MC",
+          "score": 19,
+          "outOf": 100,
+          "excluded": true,
+          "note": "Part of Midterm"
+        },
+        {
+          "name": "Midterm",
+          "score": 51,
+          "outOf": 100,
+          "worth": 15
+        },
+        {
+          "name": "Final Exam",
+          "score": null,
+          "outOf": 100,
+          "worth": 20,
+          "note": "From syllabus (not yet graded)"
+        },
+        {
+          "name": "Brainstorming",
+          "score": 70,
+          "outOf": 100,
+          "worth": 5
+        },
+        {
+          "name": "Rev1",
+          "score": 5,
+          "outOf": 5,
+          "excluded": true,
+          "note": "Part of Reviews"
+        },
+        {
+          "name": "Rev2",
+          "score": 5,
+          "outOf": 5,
+          "excluded": true,
+          "note": "Part of Reviews"
+        },
+        {
+          "name": "Rev3",
+          "score": 5,
+          "outOf": 5,
+          "excluded": true,
+          "note": "Part of Reviews"
+        },
+        {
+          "name": "Reviews",
+          "score": 5,
+          "outOf": 5,
+          "worth": 5,
+          "note": "Presentation evaluations"
+        },
+        {
+          "name": "Weeklies",
+          "score": 10,
+          "outOf": 10,
+          "worth": 3,
+          "note": "Weekly progress reports to date"
+        },
+        {
+          "name": "Grammatical",
+          "score": 1,
+          "outOf": 1
+        },
+        {
+          "name": "OCL",
+          "score": 1,
+          "outOf": 1
+        },
+        {
+          "name": "Class Participation (2)",
+          "score": 2,
+          "outOf": 2
+        }
+      ]
+    },
+    {
+      "name": "Design Project",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Description Report",
+          "score": 85,
+          "outOf": 100,
+          "worth": 10
+        },
+        {
+          "name": "Description Presentation",
+          "score": 4.2,
+          "outOf": 5
+        },
+        {
+          "name": "Requirements Report",
+          "score": null,
+          "outOf": 100,
+          "worth": 10,
+          "note": "From syllabus (not yet graded)"
+        },
+        {
+          "name": "Final Design Report",
+          "score": null,
+          "outOf": 100,
+          "worth": 20,
+          "note": "From syllabus (not yet graded)"
+        },
+        {
+          "name": "Final Design Presentation",
+          "score": null,
+          "outOf": 5,
+          "note": "From syllabus (not yet graded)"
+        }
+      ]
+    },
+    {
+      "name": "Implementation Project",
+      "weight": 0,
+      "items": [
+        {
+          "name": "First Scenario",
+          "score": 85,
+          "outOf": 100,
+          "worth": 5
+        },
+        {
+          "name": "Second Scenario",
+          "score": 89,
+          "outOf": 100,
+          "worth": 5
+        },
+        {
+          "name": "Demo 1",
+          "score": 80,
+          "outOf": 100,
+          "worth": 10
+        },
+        {
+          "name": "Demo 2",
+          "score": null,
+          "outOf": 100,
+          "worth": 10,
+          "note": "From syllabus (not yet graded)"
+        },
+        {
+          "name": "Final Oral Presentation & Demo",
+          "score": null,
+          "outOf": 5,
+          "note": "From syllabus (not yet graded)"
+        },
+        {
+          "name": "Final Implementation Report",
+          "score": null,
+          "outOf": 100,
+          "worth": 10,
+          "note": "From syllabus (not yet graded)"
+        },
+        {
+          "name": "CASE tool usage (Jira)",
+          "score": null,
+          "outOf": 5,
+          "note": "From syllabus (not yet graded)"
+        }
+      ]
+    }
+  ]
+}

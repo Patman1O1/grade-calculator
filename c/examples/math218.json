@@ -1,0 +1,142 @@
+{
+  "name": "Math 218 – Applied Linear Algebra",
+  "scheme": "weighted",
+  "displayDecimals": 2,
+  "scale": [
+    {
+      "letter": "A",
+      "min": 87
+    },
+    {
+      "letter": "B",
+      "min": 75
+    },
+    {
+      "letter": "C",
+      "min": 60
+    },
+    {
+      "letter": "D",
+      "min": 45
+    },
+    {
+      "letter": "F",
+      "min": 0
+    }
+  ],
+  "notes": "Weighted per the syllabus (Canvas itself is set to total points, which counts the 65.39/0 Midsemester Score as extra points and shows 118.28%). Exams form one 70% category with worths 20/20/30, so missing exams are projected at your exam average — the same method behind the posted Midsemester Score. Good attendance adds 5 points to the final exam score.",
+  "categories": [
+    {
+      "name": "MOM Homework (online)",
+      "weight": 15,
+      "items": [
+        {
+          "name": "Homework 1 (Weeks 1-2)",
+          "score": 19.5,
+          "outOf": 20
+        },
+        {
+          "name": "Homework 2 (Weeks 3-4)",
+          "score": 19.8,
+          "outOf": 20
+        },
+        {
+          "name": "Homework 3 (Weeks 5-6)",
+          "score": 20,
+          "outOf": 20
+        },
+        {
+          "name": "Homework 4 (Weeks 7-8)",
+          "score": 18.6,
+          "outOf": 20
+        },
+        {
+          "name": "Homework 5 (Weeks 9-10)",
+          "score": 20,
+          "outOf": 20
+        },
+        {
+          "name": "Homework 6 (Weeks 11-12)",
+          "score": null,
+          "outOf": 20
+        }
+      ],
+      "dropLowest": 1
+    },
+    {
+      "name": "Written Homework",
+      "weight": 15,
+      "items": [
+        {
+          "name": "Written Homework #1",
+          "score": 18,
+          "outOf": 18
+        },
+        {
+          "name": "Written Homework #2",
+          "score": 16,
+          "outOf": 18
+        },
+        {
+          "name": "Written Homework #3",
+          "score": 18,
+          "outOf": 18
+        },
+        {
+          "name": "Written Homework #4",
+          "score": null,
+          "outOf": 18
+        },
+        {
+          "name": "Written Homework #5",
+          "score": null,
+          "outOf": 18
+        },
+        {
+          "name": "Written Homework #6",
+          "score": null,
+          "outOf": 18
+        }
+      ],
+      "dropLowest": 1
+    },
+    {
+      "name": "Exams",
+      "weight": 70,
+      "items": [
+        {
+          "name": "Exam #1",
+          "score": 26,
+          "outOf": 50,
+          "worth": 20
+        },
+        {
+          "name": "Exam #2",
+          "score": null,
+          "outOf": 50,
+          "worth": 20
+        },
+        {
+          "name": "Final Exam",
+          "score": null,
+          "outOf": 100,
+          "worth": 30,
+          "note": "Points possible assumed; only the percentage matters"
+        }
+      ]
+    },
+    {
+      "name": "Midsemester Grade",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Midsemester Score",
+          "score": 65.39,
+          "outOf": 0,
+          "excluded": true,
+          "note": "Instructor-posted snapshot"
+        }
+      ]
+    }
+  ]
+}

@@ -25,6 +25,12 @@ Courses are saved in the browser (localStorage) and can be exported or imported 
 
 The engine lives in [`src/grade/engine.ts`](src/grade/engine.ts) and has no UI dependencies.
 
+A C11 command-line version of the same engine lives in [`c/`](c/README.md). It reads the course JSON the app exports, and a differential test checks that it matches the TypeScript engine bit for bit:
+
+```sh
+cd c && make && build/grade -n examples/cs411.json
+```
+
 ## Verification against `docs/`
 
 [`src/grade/courses.ts`](src/grade/courses.ts) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`src/grade/courses.test.ts`](src/grade/courses.test.ts) checks that the calculator reproduces every total and group row printed in those PDFs:

@@ -1,0 +1,179 @@
+{
+  "name": "CS 401 – Computer Algorithms",
+  "scheme": "points",
+  "displayDecimals": 2,
+  "scale": [
+    {
+      "letter": "A",
+      "min": 87.8048780487805
+    },
+    {
+      "letter": "B",
+      "min": 78.04878048780488
+    },
+    {
+      "letter": "C",
+      "min": 68.29268292682927
+    },
+    {
+      "letter": "D",
+      "min": 48.78048780487805
+    },
+    {
+      "letter": "F",
+      "min": 0
+    }
+  ],
+  "notes": "Total-points course. Letter cutoffs are the syllabus point thresholds (360/320/280/200) expressed as a share of the 410 planned points. Late Days is tracked on Canvas but does not count toward the grade. Homework 6, Homework 7 and the Final Exam are planned in the syllabus but not yet on Canvas.",
+  "categories": [
+    {
+      "name": "Check-Ins",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Check-In 1",
+          "score": 2,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 3",
+          "score": 2,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 4",
+          "score": 3,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 5",
+          "score": 3,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 6",
+          "score": 0,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 7",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 8",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 9",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 10",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 11",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 12",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 13",
+          "score": null,
+          "outOf": 3
+        },
+        {
+          "name": "Check-In 14",
+          "score": null,
+          "outOf": 3
+        }
+      ]
+    },
+    {
+      "name": "Homework",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Homework 0 (Optional)",
+          "score": null,
+          "outOf": 0
+        },
+        {
+          "name": "Homework 1",
+          "score": 23,
+          "outOf": 24
+        },
+        {
+          "name": "Homework 2",
+          "score": 23.5,
+          "outOf": 24
+        },
+        {
+          "name": "Homework 3",
+          "score": 24,
+          "outOf": 24
+        },
+        {
+          "name": "Homework 4",
+          "score": null,
+          "outOf": 24
+        },
+        {
+          "name": "Homework 5",
+          "score": null,
+          "outOf": 24
+        },
+        {
+          "name": "Homework 6",
+          "score": null,
+          "outOf": 24,
+          "note": "From syllabus (not yet on Canvas)"
+        },
+        {
+          "name": "Homework 7",
+          "score": null,
+          "outOf": 24,
+          "note": "From syllabus (not yet on Canvas)"
+        }
+      ]
+    },
+    {
+      "name": "Assignments",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Late Days",
+          "score": 4,
+          "outOf": 5,
+          "excluded": true,
+          "note": "Late days remaining; not graded"
+        }
+      ]
+    },
+    {
+      "name": "Exams",
+      "weight": 0,
+      "items": [
+        {
+          "name": "Midterm Exam",
+          "score": 26,
+          "outOf": 100
+        },
+        {
+          "name": "Final Exam",
+          "score": null,
+          "outOf": 100,
+          "note": "From syllabus (not yet on Canvas)"
+        }
+      ]
+    }
+  ]
+}
