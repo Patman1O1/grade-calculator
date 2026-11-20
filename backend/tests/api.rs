@@ -1,0 +1,118 @@
+//! Tests of the operations the front-end calls (through `wasm-bindgen`), and of
+//! the JSON shapes they produce.
+
+use grade_calculator::api::{NOT_A_COURSE, evaluate, examples, import_courses, summaries};
+use grade_calculator::examples::{blank_course, example};
+use grade_calculator::{Course, Status};
+use serde_json::{Value, json};
+
+fn to_json<T: serde::Serialize>(v: &T) -> Value {
+    serde_json::to_value(v).unwrap()
+}
+
+#[test]
+fn lists_and_builds_examples() {
+    let list = to_json(&examples());
+    assert_eq!(list.as_array().unwrap().len(), 5);
+    assert_eq!(list[0]["key"], "cs401");
+
+    let course = to_json(&example("cs411").unwrap());
+    assert_eq!(course["scheme"], "weighted");
+    assert_eq!(course["categories"][0]["dropLowest"], 2.0);
+    assert!(course["id"].as_str().unwrap().starts_with("course-"));
+    // Ungraded courses carry no computed fields.
+    assert!(course.get("percent").is_none());
+    assert!(course["categories"][0].get("earned").is_none());
+    assert!(course["categories"][0]["items"][0].get("status").is_none());
+
+    assert!(example("nope").is_none());
+    // Every call gives fresh ids.
+    assert_ne!(example("cs401").unwrap().id, example("cs401").unwrap().id);
+}
+
+#[test]
+fn evaluates_a_course_and_solves_targets() {
+    let course: Course = serde_json::from_value(json!({
+        "id": "c", "name": "Test", "scheme": "points",
+        "scale": [{ "letter": "A", "min": 90 }, { "letter": "F", "min": 0 }],
+        "categories": [{
+            "id": "k", "name": "All", "weight": 0,
+            "items": [
+                { "id": "a", "name": "A", "score": 60, "outOf": 100 },
+                { "id": "b", "name": "B", "score": null, "outOf": 100 }
+            ]
+        }]
+    }))
+    .unwrap();
+    let out = to_json(&evaluate(&course, &[80.0, 95.0, 30.0]));
+
+    let graded = &out["course"];
+    assert_eq!(graded["name"], "Test");
+    assert_eq!(graded["percent"], 60.0);
+    assert_eq!(graded["letter"], "F");
+    assert_eq!(graded["earned"], 60.0);
+    assert_eq!(graded["categories"][0]["percent"], 60.0);
+    let items = &graded["categories"][0]["items"];
+    assert_eq!(items[0]["status"], "counted");
+    assert_eq!(items[0]["earned"], 60.0);
+    assert_eq!(items[1]["status"], "ungraded");
+    assert_eq!(items[1]["score"], Value::Null);
+
+    assert_eq!(out["remaining"], 1);
+    assert_eq!(out["needs"][0]["target"], 80.0);
+    assert_eq!(out["needs"][0]["needed"]["kind"], "needs");
+    assert!((out["needs"][0]["needed"]["fraction"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+    assert_eq!(out["needs"][1]["needed"]["kind"], "impossible");
+    assert_eq!(out["needs"][2]["needed"], json!({ "kind": "secured" }));
+}
+
+#[test]
+fn summarises_every_course() {
+    let c1 = example("cs401").unwrap();
+    let c2 = blank_course();
+    let out = summaries(vec![c1.clone(), c2]);
+    assert_eq!(out[0].id, c1.id);
+    assert!((out[0].percent.unwrap() - 56.95).abs() < 0.005);
+    assert_eq!(out[0].letter.as_deref(), Some("D"));
+    assert_eq!(out[1].percent, None);
+    // The front-end relies on `null` (not a missing key) here.
+    assert_eq!(to_json(&out[1])["percent"], Value::Null);
+}
+
+#[test]
+fn import_validates_and_reassigns_ids() {
+    let course = to_json(&example("math218").unwrap());
+    let imported = import_courses(json!([course, { "not": "a course" }])).unwrap();
+    assert_eq!(imported.len(), 1);
+    assert_eq!(imported[0].name, course["name"]);
+    assert_ne!(Value::from(imported[0].id.clone()), course["id"]);
+
+    // Exports from the old TypeScript-only app have the same shape (ids optional).
+    let legacy = json!({ "name": "Old", "scheme": "points", "scale": [], "categories": [
+        { "name": "C", "weight": 0, "items": [{ "name": "I", "score": 1, "outOf": 2, "neverDrop": true }] }
+    ]});
+    let imported = import_courses(legacy).unwrap();
+    assert!(imported[0].categories[0].items[0].never_drop);
+
+    assert_eq!(import_courses(json!({ "hello": 1 })), Err(NOT_A_COURSE));
+    assert_eq!(import_courses(json!(42)), Err(NOT_A_COURSE));
+}
+
+#[test]
+fn computed_fields_in_input_are_ignored() {
+    let forged = json!({ "name": "F", "scheme": "points", "scale": [], "percent": 100, "letter": "A",
+        "categories": [{ "name": "C", "weight": 0, "earned": 99,
+            "items": [{ "name": "I", "score": 0, "outOf": 10, "earned": 10, "status": "counted" }] }] });
+
+    let imported = import_courses(forged.clone()).unwrap();
+    assert_eq!(imported[0].percent, None);
+    assert_eq!(imported[0].categories[0].items[0].earned, None);
+    assert_eq!(imported[0].categories[0].items[0].status, None);
+
+    let course: Course = serde_json::from_value(forged).unwrap();
+    let graded = evaluate(&course, &[]).course;
+    assert_eq!(graded.percent, Some(0.0));
+    assert_eq!(graded.letter, None);
+    assert_eq!(graded.categories[0].items[0].earned, Some(0.0));
+    assert_eq!(graded.categories[0].items[0].status, Some(Status::Counted));
+}

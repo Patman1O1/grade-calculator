@@ -2,14 +2,55 @@
 
 A course grade calculator that handles the grading schemes used by Canvas, Blackboard and typical syllabi. You can use it for any course: enter the categories and items, then see your current grade, letter, per-category breakdown, and the average you need on the remaining work for each letter.
 
+It runs entirely in your browser and has two parts:
+
+- **`backend/`**: the grading engine, in Rust. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver), the example courses, and import validation. It is compiled to WebAssembly with [wasm-bindgen](https://crates.io/crates/wasm-bindgen).
+- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI and calls the engine directly, so every edit is graded instantly with no server. Courses are saved in your browser (localStorage) and can be exported or imported as JSON. The app starts with no courses; create one with **New**, or load one of the examples below from **Add example…**.
+
+## Running locally
+
+You need Rust (stable, 1.85 or newer) with the WebAssembly target, the `wasm-bindgen` CLI at the same version as `backend/Cargo.lock`, and Node 20 or newer:
+
 ```sh
-npm install
-npm run dev      # app at http://localhost:5173
-npm test         # checks the calculator against the PDFs in docs/
-npm run build
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.130 --locked
 ```
 
-Courses are saved in the browser (localStorage) and can be exported or imported as JSON.
+Then:
+
+```sh
+cd frontend
+npm install
+npm run dev        # builds the engine, then serves http://localhost:5173/grade-calculator/
+npm run build      # builds the engine and the app into frontend/dist
+```
+
+`npm run wasm` rebuilds just the engine (into `frontend/src/wasm/`, which is generated and not committed); run it again after changing Rust code while `npm run dev` is running.
+
+Tests run natively, no browser needed:
+
+```sh
+cd engine && cargo test    # unit tests, the front-end interface, and the docs/ PDF checks
+```
+
+## Engine interface
+
+[`backend/src/wasm.rs`](backend/src/wasm.rs) exports these functions to JavaScript; [`frontend/src/engine.ts`](frontend/src/engine.ts) wraps them with TypeScript types. They take and return plain objects in the same camelCase JSON shape the app stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs)). Errors are thrown as JS `Error`s.
+
+| Function | Returns |
+|---|---|
+| `examples()` | `[{ key, label }]` |
+| `example(key)` | a `Course` with fresh ids |
+| `blankCourse()` | a starter `Course` |
+| `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
+| `summaries(courses)` | `[{ id, percent, letter }]` |
+| `importCourses(data)` | the courses in `data` (one or a list), validated, with fresh ids |
+
+A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`), `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
+
+## Deploying
+
+The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted for free on GitHub Pages at https://patman1o1.github.io/grade-calculator/. [The workflow](.github/workflows/deploy.yml) tests the engine and builds the app on every push, and deploys pushes to `main`. One-time setup: repo **Settings → Pages → Source: GitHub Actions**.
 
 ## How grades are computed
 
@@ -23,11 +64,11 @@ Courses are saved in the browser (localStorage) and can be exported or imported 
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Each letter has a minimum %. |
 
-The engine lives in [`src/grade/engine.ts`](src/grade/engine.ts) and has no UI dependencies.
+Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item.rs`](backend/src/item.rs) scales scores, [`category.rs`](backend/src/category.rs) applies drop rules, and [`course.rs`](backend/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
 
 ## Verification against `docs/`
 
-[`src/grade/courses.ts`](src/grade/courses.ts) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`src/grade/courses.test.ts`](src/grade/courses.test.ts) checks that the calculator reproduces every total and group row printed in those PDFs:
+[`backend/src/examples.rs`](backend/src/examples.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`backend/tests/courses.rs`](backend/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
 
 | Course | Gradebook | PDF shows | Calculator |
 |---|---|---|---|

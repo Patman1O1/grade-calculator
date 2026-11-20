@@ -1,0 +1,191 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { engine } from './engine'
+import { formatPercent } from './format'
+import type { Course } from './types'
+import { loadState, saveState, type SavedState } from './storage'
+import { CourseEditor, type Mutate } from './components/CourseEditor'
+import { Summary } from './components/Summary'
+
+/** Letter targets (highest first) followed by the user's custom target, if any. */
+function targetsFor(course: Course, custom: number | null): number[] {
+  const letters = course.scale
+    .map((c) => c.min)
+    .filter((m) => m > 0)
+    .sort((a, b) => b - a)
+  return custom === null ? letters : [...letters, custom]
+}
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+/** Editor + summary for one course, graded by the Rust engine on every change. */
+function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
+  const [custom, setCustom] = useState<number | null>(null)
+  const evaluation = useMemo(() => {
+    try {
+      return { data: engine.evaluate(course, targetsFor(course, custom)), error: null }
+    } catch (e) {
+      return { data: null, error: message(e) }
+    }
+  }, [course, custom])
+
+  return (
+    <>
+      {evaluation.error && (
+        <p className="banner" role="alert">
+          This course couldn’t be graded: {evaluation.error}
+        </p>
+      )}
+      <main className="layout">
+        <CourseEditor course={course} graded={evaluation.data?.course ?? null} mutate={mutate} />
+        <Summary course={course} evaluation={evaluation.data} custom={custom} onCustom={setCustom} />
+      </main>
+    </>
+  )
+}
+
+/** Saved courses, or none on a first visit (examples are under "Add example…"). */
+function initialState(): SavedState {
+  return loadState() ?? { courses: [], selectedId: null }
+}
+
+export default function App() {
+  const [state, setState] = useState<SavedState>(initialState)
+  const examples = useMemo(() => engine.examples(), [])
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => saveState(state), [state])
+
+  const { courses } = state
+  const course = courses.find((c) => c.id === state.selectedId) ?? courses[0] ?? null
+  const percents = useMemo(() => {
+    try {
+      return new Map(engine.summaries(courses).map((s) => [s.id, s.percent]))
+    } catch {
+      return new Map<string, number | null>()
+    }
+  }, [courses])
+
+  const select = (id: string) => setState((s) => ({ ...s, selectedId: id }))
+  const addCourses = (added: Course[]) => {
+    if (added.length === 0) return
+    setState((s) => ({ courses: [...s.courses, ...added], selectedId: added[0].id }))
+  }
+
+  const mutate: Mutate = (fn) =>
+    setState((s) => ({
+      ...s,
+      courses: s.courses.map((c) => {
+        if (c.id !== course?.id) return c
+        const draft = structuredClone(c)
+        fn(draft)
+        return draft
+      }),
+    }))
+
+  const removeCourse = () => {
+    if (!course || !window.confirm(`Delete “${course.name}”?`)) return
+    setState((s) => {
+      const rest = s.courses.filter((c) => c.id !== course.id)
+      return { courses: rest, selectedId: rest[0]?.id ?? null }
+    })
+  }
+
+  const duplicate = () => {
+    if (!course) return
+    const [copy] = engine.importCourses(course)
+    addCourses([{ ...copy, name: `${course.name} (copy)` }])
+  }
+
+  const exportCourse = () => {
+    if (!course) return
+    const blob = new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${course.name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'course'}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const importCourse = async (file: File) => {
+    try {
+      addCourses(engine.importCourses(JSON.parse(await file.text())))
+    } catch (e) {
+      window.alert(e instanceof SyntaxError ? 'That file is not valid JSON.' : message(e))
+    }
+  }
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <h1>Grade Calculator</h1>
+        <div className="course-picker">
+          <select
+            aria-label="Course"
+            value={course?.id ?? ''}
+            onChange={(e) => select(e.target.value)}
+            disabled={courses.length === 0}
+          >
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} — {formatPercent(percents.get(c.id), c.displayDecimals ?? 2)}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => addCourses([engine.blankCourse()])}>
+            New
+          </button>
+          <select
+            aria-label="Load example"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) addCourses([engine.example(e.target.value)])
+            }}
+          >
+            <option value="">Add example…</option>
+            {examples.map((e) => (
+              <option key={e.key} value={e.key}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          {course && (
+            <button type="button" onClick={duplicate}>
+              Duplicate
+            </button>
+          )}
+          <button type="button" onClick={exportCourse} disabled={!course}>
+            Export
+          </button>
+          <button type="button" onClick={() => fileInput.current?.click()}>
+            Import
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void importCourse(f)
+              e.target.value = ''
+            }}
+          />
+          <button type="button" className="danger" onClick={removeCourse} disabled={!course}>
+            Delete
+          </button>
+        </div>
+      </header>
+
+      {course ? (
+        <CourseView key={course.id} course={course} mutate={mutate} />
+      ) : (
+        <main className="empty-state">
+          <p>No courses yet.</p>
+          <button type="button" onClick={() => addCourses([engine.blankCourse()])}>
+            Create a course
+          </button>
+        </main>
+      )}
+    </div>
+  )
+}

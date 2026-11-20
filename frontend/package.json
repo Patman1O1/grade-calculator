@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "wasm": "cargo build --manifest-path ../backend/Cargo.toml --lib --release --target wasm32-unknown-unknown && wasm-bindgen ../backend/target/wasm32-unknown-unknown/release/grade_calculator.wasm --target web --remove-name-section --remove-producers-section --out-dir src/wasm --out-name engine",
+    "dev": "npm run wasm && vite",
+    "build": "npm run wasm && tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "test": "vitest run"
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -26,7 +26,6 @@
     "globals": "^17.13.0",
     "typescript": "~7.0.2",
     "typescript-eslint": "^8.72.0",
-    "vite": "^8.3.5",
-    "vitest": "^5.1.0"
+    "vite": "^8.3.5"
   }
 }

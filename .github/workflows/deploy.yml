@@ -1,48 +1,84 @@
-# Builds the app and deploys it to GitHub Pages.
+# Tests the Rust backend and builds the app on every push and pull request;
+# deploys it to GitHub Pages on pushes to main.
 # One-time setup: repo Settings → Pages → Source: "GitHub Actions".
-name: Deploy to GitHub Pages
+name: Build and deploy
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Only one deployment at a time; let an in-progress one finish.
 concurrency:
-  group: pages
+  group: ${{ github.ref == 'refs/heads/main' && 'pages' || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Test (reproduces the gradebook PDFs in docs/)
+        run: cargo test --locked
+
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust for WebAssembly
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+      - name: Install wasm-bindgen (same version as backend/Cargo.lock)
+        run: |
+          version=$(grep -A1 '^name = "wasm-bindgen"$' backend/Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          cargo install wasm-bindgen-cli --version "$version" --locked
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: lts/*
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
+        working-directory: frontend
         run: npm ci
-      - name: Test
-        run: npm test
-      - name: Build
+      - name: Build (Rust → WebAssembly, then the React app)
+        working-directory: frontend
         run: npm run build
       - name: Set up Pages
+        if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Upload artifact
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: ./dist
+          path: ./frontend/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [backend, build]
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

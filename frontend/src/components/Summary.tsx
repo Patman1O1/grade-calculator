@@ -1,15 +1,17 @@
-import { useState } from 'react'
-import type { Course, CourseResult } from '../grade/types'
-import { formatNumber, formatPercent, neededOnRemaining, round } from '../grade/engine'
+import type { Course, Evaluation, Needed } from '../types'
+import { formatNumber, formatPercent, round } from '../format'
 import { NumberInput } from './NumberInput'
 
 interface Props {
   course: Course
-  result: CourseResult
+  /** The engine's evaluation; null if the course couldn't be graded. */
+  evaluation: Evaluation | null
+  custom: number | null
+  onCustom: (value: number | null) => void
 }
 
-function describeNeed(course: Course, target: number): string {
-  const need = neededOnRemaining(course, target)
+function describeNeed(need: Needed | undefined): string {
+  if (!need) return '…'
   switch (need.kind) {
     case 'no-remaining':
       return 'nothing left to grade'
@@ -22,32 +24,44 @@ function describeNeed(course: Course, target: number): string {
   }
 }
 
-export function Summary({ course, result }: Props) {
-  const [custom, setCustom] = useState<number | null>(null)
+export function Summary({ course, evaluation, custom, onCustom }: Props) {
   const decimals = course.displayDecimals ?? 2
   const weighted = course.scheme === 'weighted'
-  const remaining = course.categories.reduce(
-    (n, c) => n + c.items.filter((i) => i.score === null && !i.excluded && i.outOf > 0).length,
-    0,
-  )
   const targets = [...course.scale].filter((c) => c.min > 0).sort((a, b) => b.min - a.min)
+
+  if (!evaluation) {
+    return (
+      <aside className="summary">
+        <section className="panel total">
+          <span className="label">Current grade</span>
+          <div className="big">
+            <span className="pct muted">…</span>
+          </div>
+        </section>
+      </aside>
+    )
+  }
+
+  const { course: graded, remaining, needs } = evaluation
+  const gradedPossible = graded.possible ?? 0
+  const needFor = (target: number) => needs.find((n) => n.target === target)?.needed
 
   return (
     <aside className="summary">
       <section className="panel total">
         <span className="label">Current grade</span>
         <div className="big">
-          <span className="pct">{formatPercent(result.percent, decimals)}</span>
-          {result.letter && <span className="letter">{result.letter}</span>}
+          <span className="pct">{formatPercent(graded.percent, decimals)}</span>
+          {graded.letter && <span className="letter">{graded.letter}</span>}
         </div>
         {course.scheme === 'points' && (
           <span className="sub">
-            {formatNumber(result.earned, decimals)} / {formatNumber(result.possible, decimals)} points
+            {formatNumber(graded.earned ?? 0, decimals)} / {formatNumber(gradedPossible, decimals)} points
           </span>
         )}
-        {weighted && result.possible > 0 && (
+        {weighted && gradedPossible > 0 && (
           <span className="sub">
-            Based on {formatNumber(result.possible, 2).replace(/\.?0+$/, '')}
+            Based on {formatNumber(gradedPossible, 2).replace(/\.?0+$/, '')}
             {' '}weight of graded categories
           </span>
         )}
@@ -56,15 +70,17 @@ export function Summary({ course, result }: Props) {
       <section className="panel breakdown">
         <h3>Breakdown</h3>
         <ul>
-          {result.categories.map((c) => {
+          {course.categories.map((category) => {
+            const c = graded.categories.find((g) => g.id === category.id)
+            if (!c) return null
             const share =
-              weighted && result.possible > 0 && c.percent !== null && c.category.weight > 0
-                ? (c.category.weight / result.possible) * 100
+              weighted && gradedPossible > 0 && c.percent !== undefined && category.weight > 0
+                ? (category.weight / gradedPossible) * 100
                 : null
             return (
-              <li key={c.category.id} className={c.percent === null ? 'empty' : ''}>
+              <li key={category.id} className={c.percent === undefined ? 'empty' : ''}>
                 <div className="row">
-                  <span className="cname">{c.category.name}</span>
+                  <span className="cname">{category.name}</span>
                   <span className="cpct">{formatPercent(c.percent, decimals)}</span>
                 </div>
                 <div className="bar" aria-hidden="true">
@@ -72,13 +88,13 @@ export function Summary({ course, result }: Props) {
                 </div>
                 <div className="row meta">
                   <span>
-                    {formatNumber(c.earned, decimals)} / {formatNumber(c.possible, decimals)}
+                    {formatNumber(c.earned ?? 0, decimals)} / {formatNumber(c.possible ?? 0, decimals)}
                   </span>
                   {weighted && (
                     <span>
-                      weight {c.category.weight}
-                      {c.category.extraCredit ? ' (EC)' : ''}
-                      {share !== null && !c.category.extraCredit ? ` · ${round(share, 1)}% now` : ''}
+                      weight {category.weight}
+                      {category.extraCredit ? ' (EC)' : ''}
+                      {share !== null && !category.extraCredit ? ` · ${round(share, 1)}% now` : ''}
                     </span>
                   )}
                 </div>
@@ -104,7 +120,7 @@ export function Summary({ course, result }: Props) {
                     <th>
                       {t.letter} <small>≥ {round(t.min, 2)}%</small>
                     </th>
-                    <td>{describeNeed(course, t.min)}</td>
+                    <td>{describeNeed(needFor(t.min))}</td>
                   </tr>
                 ))}
                 <tr>
@@ -114,10 +130,10 @@ export function Summary({ course, result }: Props) {
                       aria-label="Custom target percent"
                       placeholder="Target %"
                       value={custom}
-                      onChange={setCustom}
+                      onChange={onCustom}
                     />
                   </th>
-                  <td>{custom === null ? '' : describeNeed(course, custom)}</td>
+                  <td>{custom === null ? '' : describeNeed(needFor(custom))}</td>
                 </tr>
               </tbody>
             </table>
