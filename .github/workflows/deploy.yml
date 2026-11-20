@@ -1,4 +1,4 @@
-# Tests the Rust engine and builds the app on every push and pull request;
+# Tests the Rust backend and builds the app on every push and pull request;
 # deploys it to GitHub Pages on pushes to main.
 # One-time setup: repo Settings → Pages → Source: "GitHub Actions".
 name: Build and deploy
@@ -17,11 +17,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  engine:
+  backend:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: engine
+        working-directory: backend
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +70,7 @@ jobs:
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [engine, build]
+    needs: [backend, build]
     permissions:
       pages: write
       id-token: write
