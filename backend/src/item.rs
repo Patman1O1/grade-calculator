@@ -4,6 +4,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::is_false;
 
+/// Whether an item counts toward its category's grade, and if not, why not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Status {
+    /// Graded and part of the category's grade.
+    Counted,
+    /// Graded, but removed by a drop-lowest / drop-highest rule.
+    Dropped,
+    /// Marked as not counting toward the grade.
+    Excluded,
+    /// No score yet.
+    Ungraded,
+}
+
 /// One graded thing. Its raw result is `score / out_of`; `worth` says how much
 /// it counts inside its category (defaults to `out_of`, i.e. plain points).
 ///
@@ -34,13 +48,11 @@ pub struct Item {
     pub note: Option<String>,
 
     // Computed when the item's category is graded (see the crate docs).
-    /// Item is graded, not excluded and not dropped.
+    /// Whether the item counts toward its category's grade, and if not, why not.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub counted: Option<bool>,
-    /// Removed by a drop-lowest / drop-highest rule.
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub dropped: Option<bool>,
-    /// Contribution to the category: score / outOf * worth (raw score for extra credit).
+    pub status: Option<Status>,
+    /// Contribution to the category: score / outOf * worth (raw score for
+    /// extra credit). 0 unless the status is `Counted` or `Dropped`.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub earned: Option<f64>,
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
@@ -70,29 +82,30 @@ impl Item {
         }
     }
 
-    /// Grade the item on its own, before any drop rule: fills in `counted`,
-    /// `dropped` (false), `earned` and `possible`. [`crate::Category::grade`]
-    /// calls this for every item and then applies its drop rules.
+    /// Grade the item on its own, before any drop rule: fills in `status`
+    /// (`Counted`, `Excluded` or `Ungraded`), `earned` and `possible`.
+    /// [`crate::Category::grade`] calls this for every item and then applies
+    /// its drop rules, which can change `Counted` to `Dropped`.
     pub fn grade(&mut self) {
-        let (counted, (earned, possible)) = match self.score {
-            Some(score) if !self.excluded => (true, self.contribution(score)),
-            _ => (false, (0.0, 0.0)),
+        let (status, (earned, possible)) = match self.score {
+            _ if self.excluded => (Status::Excluded, (0.0, 0.0)),
+            None => (Status::Ungraded, (0.0, 0.0)),
+            Some(score) => (Status::Counted, self.contribution(score)),
         };
-        self.counted = Some(counted);
-        self.dropped = Some(false);
+        self.status = Some(status);
         self.earned = Some(earned);
         self.possible = Some(possible);
     }
 
-    /// Graded and not excluded: a candidate for counting or dropping.
-    pub(crate) fn is_counted(&self) -> bool {
-        self.counted == Some(true)
+    /// Part of its category's grade (as of the last `grade`).
+    pub fn is_counted(&self) -> bool {
+        self.status == Some(Status::Counted)
     }
 
-    /// Mark the item as removed by a drop rule.
+    /// Mark a counted item as removed by a drop rule. It keeps its `earned`
+    /// and `possible`, so the UI can still show what the dropped score was.
     pub(crate) fn drop_from_grade(&mut self) {
-        self.counted = Some(false);
-        self.dropped = Some(true);
+        self.status = Some(Status::Dropped);
     }
 }
 
@@ -115,7 +128,7 @@ mod tests {
         i.grade();
         assert!((i.earned.unwrap() - 8.5).abs() < 1e-9);
         assert_eq!(i.possible, Some(10.0));
-        assert_eq!(i.counted, Some(true));
+        assert_eq!(i.status, Some(Status::Counted));
     }
 
     #[test]
@@ -129,16 +142,33 @@ mod tests {
     fn ungraded_and_excluded_items_do_not_count() {
         let mut ungraded = item(None, 10.0);
         ungraded.grade();
-        assert_eq!(ungraded.counted, Some(false));
+        assert_eq!(ungraded.status, Some(Status::Ungraded));
+        assert!(!ungraded.is_counted());
         assert!(ungraded.is_remaining());
 
         let mut excluded = item(Some(5.0), 10.0);
         excluded.excluded = true;
         excluded.grade();
         assert_eq!(
-            (excluded.counted, excluded.earned),
-            (Some(false), Some(0.0))
+            (excluded.status, excluded.earned),
+            (Some(Status::Excluded), Some(0.0))
         );
         assert!(!excluded.is_remaining());
+
+        // Excluded wins over ungraded: it won't count even once it has a score.
+        let mut excluded_blank = item(None, 10.0);
+        excluded_blank.excluded = true;
+        excluded_blank.grade();
+        assert_eq!(excluded_blank.status, Some(Status::Excluded));
+    }
+
+    #[test]
+    fn status_serialises_in_lowercase_and_is_ignored_on_input() {
+        let mut i = item(Some(1.0), 2.0);
+        i.grade();
+        let json = serde_json::to_value(&i).unwrap();
+        assert_eq!(json["status"], "counted");
+        let back: Item = serde_json::from_value(json).unwrap();
+        assert_eq!(back.status, None);
     }
 }

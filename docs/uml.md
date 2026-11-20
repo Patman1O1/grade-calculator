@@ -115,8 +115,7 @@ classDiagram
     +excluded: bool
     +neverDrop: bool
     +note?: String
-    +/counted?: bool
-    +/dropped?: bool
+    +/status?: Status
     +/earned?: f64
     +/possible?: f64
     +worth(&self) f64
@@ -129,10 +128,18 @@ classDiagram
     +letter: String
     +min: f64
   }
+  class Status {
+    <<enum>>
+    Counted = "counted"
+    Dropped = "dropped"
+    Excluded = "excluded"
+    Ungraded = "ungraded"
+  }
   Course "1" *-- "0..*" Category : categories
   Category "1" *-- "0..*" Item : items
   Course "1" *-- "0..*" Cutoff : scale
   Course --> "1" Scheme : scheme
+  Item --> "0..1" Status : status
   Course ..> Needed : needed_on_remaining
 ```
 
@@ -140,8 +147,9 @@ classDiagram
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - Every node keeps its `id`, so the front-end matches graded values to rows by id. An evaluation that is one keystroke behind never lands on the wrong row.
+- `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
-- `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all five types at the crate root.
+- `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all six types at the crate root.
 
 ## 3. "What do I need?" (`backend/src/course.rs`)
 

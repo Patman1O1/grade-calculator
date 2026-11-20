@@ -5,7 +5,8 @@
 //! module together with the logic that grades it:
 //!
 //! - [`item`]: an [`Item`] is one graded thing. Its raw result is
-//!   `score / out_of`; `worth` says how much it counts inside its category.
+//!   `score / out_of`; `worth` says how much it counts inside its category,
+//!   and its [`Status`] says whether it counts and, if not, why not.
 //! - [`category`]: a [`Category`] groups items, may drop the lowest/highest
 //!   results (the Canvas-exact drop search lives here), and carries a weight.
 //! - [`course`]: a [`Course`] combines categories by total points or by weights
@@ -18,7 +19,7 @@
 //! and that older JSON exports of the TypeScript app used, so those still import.
 //!
 //! The grade lives on the same types: [`Course::grade`] fills in each item's
-//! `counted`/`dropped`/`earned`/`possible`, each category's
+//! `status`/`earned`/`possible`, each category's
 //! `earned`/`possible`/`percent`, and the course's `earned`/`possible`/`percent`/
 //! `letter`. These computed fields are `None` (and left out of the JSON) until
 //! the course is graded, and they are ignored when a course is deserialised, so
@@ -32,7 +33,7 @@ pub mod item;
 
 pub use category::Category;
 pub use course::{Course, Cutoff, Needed, Scheme};
-pub use item::Item;
+pub use item::{Item, Status};
 
 use std::path::Path;
 

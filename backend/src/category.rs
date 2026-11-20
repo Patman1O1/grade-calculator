@@ -28,7 +28,7 @@ pub struct Category {
     pub items: Vec<Item>,
 
     // Computed by `grade` (see the crate docs).
-    /// Sum over counted items.
+    /// Sum over items whose status is `Counted`.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub earned: Option<f64>,
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
@@ -224,6 +224,7 @@ fn choose_kept(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::item::Status;
     use crate::round;
 
     fn item(score: Option<f64>, out_of: f64) -> Item {
@@ -246,7 +247,10 @@ mod tests {
     }
 
     fn dropped(c: &Category) -> Vec<bool> {
-        c.items.iter().map(|i| i.dropped == Some(true)).collect()
+        c.items
+            .iter()
+            .map(|i| i.status == Some(Status::Dropped))
+            .collect()
     }
 
     #[test]
@@ -306,7 +310,16 @@ mod tests {
             0.0,
         );
         assert_eq!(c.percent, Some(80.0));
-        assert_eq!(dropped(&c), [false, false, true, false]);
+        let statuses: Vec<_> = c.items.iter().map(|i| i.status.unwrap()).collect();
+        assert_eq!(
+            statuses,
+            [
+                Status::Ungraded,
+                Status::Excluded,
+                Status::Dropped,
+                Status::Counted
+            ]
+        );
     }
 
     #[test]

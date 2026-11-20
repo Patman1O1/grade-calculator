@@ -19,6 +19,17 @@
 
 export type Scheme = 'points' | 'weighted'
 
+/** Whether an item counts toward its category's grade, and if not, why not. */
+export type Status =
+  /** Graded and part of the category's grade. */
+  | 'counted'
+  /** Graded, but removed by a drop-lowest / drop-highest rule. */
+  | 'dropped'
+  /** Marked as not counting toward the grade. */
+  | 'excluded'
+  /** No score yet. */
+  | 'ungraded'
+
 export interface Item {
   id: string
   name: string
@@ -35,10 +46,8 @@ export interface Item {
   /** Free-form note shown in the UI (e.g. due date). */
   note?: string
 
-  /** Computed: graded, not excluded and not dropped. */
-  counted?: boolean
-  /** Computed: removed by a drop-lowest / drop-highest rule. */
-  dropped?: boolean
+  /** Computed: whether the item counts toward its category's grade, and if not, why not. */
+  status?: Status
   /** Computed: contribution to the category, score / outOf * worth (raw score for extra credit). */
   earned?: number
   /** Computed. */
@@ -56,7 +65,7 @@ export interface Category {
   extraCredit?: boolean
   items: Item[]
 
-  /** Computed: sum over counted items. */
+  /** Computed: sum over items whose status is 'counted'. */
   earned?: number
   /** Computed. */
   possible?: number

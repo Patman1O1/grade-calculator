@@ -2,7 +2,7 @@
 //! (and rounded the same way the gradebook displays it).
 
 use grade_calculator::examples::{cs401, cs411, cs440, math218, math218_canvas};
-use grade_calculator::{Course, round};
+use grade_calculator::{Course, Status, round};
 
 /// `(percent, earned, possible)` of a category, rounded to 2 places.
 fn category(r: &Course, name: &str) -> (Option<f64>, f64, f64) {
@@ -56,7 +56,7 @@ fn cs411_canvas_weighted_drop_lowest_two() {
         .categories
         .iter()
         .flat_map(|c| &c.items)
-        .filter(|i| i.dropped == Some(true))
+        .filter(|i| i.status == Some(Status::Dropped))
         .map(|i| i.name.as_str())
         .collect();
     dropped.sort();

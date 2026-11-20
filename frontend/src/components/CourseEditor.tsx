@@ -1,4 +1,4 @@
-import type { Category, Course, Cutoff, Item } from '../types'
+import type { Category, Course, Cutoff, Item, Status } from '../types'
 import { formatNumber, formatPercent, newId } from '../format'
 import { NumberInput } from './NumberInput'
 
@@ -12,6 +12,14 @@ interface Props {
 }
 
 const PENDING = '…'
+
+/** Row style for each item status (see index.css). */
+const ROW_CLASS: Record<Status, string> = {
+  counted: '',
+  dropped: 'dropped',
+  excluded: 'excluded',
+  ungraded: 'pending',
+}
 
 export function CourseEditor({ course, graded, mutate }: Props) {
   const weighted = course.scheme === 'weighted'
@@ -142,15 +150,9 @@ export function CourseEditor({ course, graded, mutate }: Props) {
               <tbody>
                 {cat.items.map((item, ii) => {
                   const gi = gradedItems.get(item.id)
-                  const state = item.excluded
-                    ? 'excluded'
-                    : gi?.dropped
-                      ? 'dropped'
-                      : item.score === null
-                        ? 'pending'
-                        : ''
+                  const status = gi?.status
                   return (
-                    <tr key={item.id} className={state}>
+                    <tr key={item.id} className={status ? ROW_CLASS[status] : ''}>
                       <td className="name">
                         <input
                           aria-label="Item name"
@@ -195,14 +197,12 @@ export function CourseEditor({ course, graded, mutate }: Props) {
                         />
                       </td>
                       <td className="counts">
-                        {state === 'dropped' ? (
-                          <span className="tag">dropped</span>
-                        ) : state === 'excluded' ? (
-                          <span className="tag">excluded</span>
-                        ) : state === 'pending' ? (
+                        {status === 'counted' ? (
+                          `${formatNumber(gi?.earned ?? 0, decimals)} / ${formatNumber(gi?.possible ?? 0, decimals)}`
+                        ) : status === 'dropped' || status === 'excluded' ? (
+                          <span className="tag">{status}</span>
+                        ) : status === 'ungraded' ? (
                           <span className="muted">—</span>
-                        ) : gi ? (
-                          `${formatNumber(gi.earned ?? 0, decimals)} / ${formatNumber(gi.possible ?? 0, decimals)}`
                         ) : (
                           <span className="muted">{PENDING}</span>
                         )}

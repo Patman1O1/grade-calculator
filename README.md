@@ -47,7 +47,7 @@ The front-end calls the API on its own origin. To point a separately hosted fron
 
 ## API
 
-All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs) in `backend/src/`). A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `counted`, `dropped`, `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
+All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs) in `backend/src/`). A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`), `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
