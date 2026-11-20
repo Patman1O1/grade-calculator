@@ -7,7 +7,7 @@ export interface SavedState {
   selectedId: string | null
 }
 
-/** Courses live in the browser; the server only calculates and holds no user data. */
+/** Courses live in the browser (localStorage). */
 export function loadState(): SavedState | null {
   try {
     const raw = localStorage.getItem(KEY)

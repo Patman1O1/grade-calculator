@@ -1,4 +1,4 @@
-//! Grade calculator server.
+//! Grade calculator engine, compiled to WebAssembly for the React front-end.
 //!
 //! The data model is small but general enough to express the grading policies
 //! used by Canvas, Blackboard and typical syllabi. Each type lives in its own
@@ -13,7 +13,8 @@
 //!   ([`Scheme`]), maps percentages to letters ([`Cutoff`]), and solves "what do
 //!   I need on the remaining work?" ([`Needed`]).
 //! - [`examples`]: example courses transcribed from the PDFs in `docs/`.
-//! - [`api`]: the JSON HTTP API the React front-end calls.
+//! - [`api`]: the operations the front-end needs (evaluate, summaries, import…).
+//! - [`wasm`]: the `wasm-bindgen` JavaScript interface over [`api`].
 //!
 //! Everything serialises as camelCase JSON, the same shape the front-end stores
 //! and that older JSON exports of the TypeScript app used, so those still import.
@@ -23,42 +24,18 @@
 //! `earned`/`possible`/`percent`, and the course's `earned`/`possible`/`percent`/
 //! `letter`. These computed fields are `None` (and left out of the JSON) until
 //! the course is graded, and they are ignored when a course is deserialised, so
-//! a client can never send in results; they are always recomputed.
+//! the front-end can never send in results; they are always recomputed.
 
 pub mod api;
 pub mod category;
 pub mod course;
 pub mod examples;
 pub mod item;
+pub mod wasm;
 
 pub use category::Category;
 pub use course::{Course, Cutoff, Needed, Scheme};
 pub use item::{Item, Status};
-
-use std::path::Path;
-
-use axum::Router;
-use tower_http::compression::CompressionLayer;
-use tower_http::cors::CorsLayer;
-use tower_http::services::{ServeDir, ServeFile};
-use tower_http::trace::TraceLayer;
-
-/// The full application: the API under `/api`, plus the built front-end from
-/// `static_dir` (if given) for every other path, falling back to `index.html`.
-pub fn app(static_dir: Option<&Path>) -> Router {
-    let mut router = Router::new().nest("/api", api::router());
-    if let Some(dir) = static_dir {
-        // Unknown paths get index.html (status 200) so client-side routes work.
-        let spa = ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")));
-        router = router.fallback_service(spa);
-    }
-    router
-        // The front-end may be hosted on a different origin (e.g. GitHub Pages)
-        // and the API holds no user data, so any origin may call it.
-        .layer(CorsLayer::permissive())
-        .layer(CompressionLayer::new())
-        .layer(TraceLayer::new_for_http())
-}
 
 /// Round half away from zero, immune to binary noise like 52.549999999.
 pub fn round(x: f64, decimals: u32) -> f64 {

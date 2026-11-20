@@ -4,7 +4,7 @@ import { NumberInput } from './NumberInput'
 
 interface Props {
   course: Course
-  /** Latest evaluation from the server; null until the first one arrives. */
+  /** The engine's evaluation; null if the course couldn't be graded. */
   evaluation: Evaluation | null
   custom: number | null
   onCustom: (value: number | null) => void

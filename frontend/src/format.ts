@@ -1,4 +1,4 @@
-/** Display helpers. All grade math happens on the Rust server. */
+/** Display helpers. All grade math happens in the Rust engine (WebAssembly). */
 
 /** Round half away from zero, immune to binary noise like 52.549999999. */
 export function round(x: number, decimals: number): number {
@@ -18,7 +18,7 @@ export function formatNumber(x: number, decimals = 2): string {
 }
 
 let nextId = 0
-/** Id for things added in the browser (the server's ids contain "-s<n>", these never do). */
+/** Id for things the editor adds itself (the engine's ids contain "-s<n>", these never do). */
 export function newId(prefix = 'id'): string {
   nextId += 1
   return `${prefix}-${Date.now().toString(36)}-c${nextId}`

@@ -1,8 +1,7 @@
 /**
- * Data model for a course gradebook, and the shapes the Rust API returns.
- * These mirror backend/src/{item,category,course}.rs and backend/src/api.rs
- * (camelCase JSON);
- * keep the two in sync.
+ * Data model for a course gradebook, and the shapes the Rust engine returns.
+ * These mirror engine/src/{item,category,course}.rs and engine/src/api.rs
+ * (camelCase JSON); keep the two in sync.
  *
  *  - An Item is one graded thing (a quiz, an exam, a lab). Its raw result is
  *    `score / outOf`. `worth` says how much the item counts inside its category
@@ -12,8 +11,8 @@
  *  - A Course combines categories either by total points or by weights.
  *
  * The grade lives on the same types. Fields marked "computed" are filled in
- * by the server (`POST /api/evaluate` returns the graded course); they are
- * absent on the courses the browser stores and exports, and the server
+ * by the engine (`engine.evaluate` returns the graded course); they are
+ * absent on the courses the browser stores and exports, and the engine
  * ignores them on input.
  */
 
@@ -101,7 +100,7 @@ export interface Course {
 }
 
 // ---------------------------------------------------------------------------
-// API responses
+// Engine results
 // ---------------------------------------------------------------------------
 
 export type Needed =

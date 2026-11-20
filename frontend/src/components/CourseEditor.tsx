@@ -6,7 +6,7 @@ export type Mutate = (fn: (draft: Course) => void) => void
 
 interface Props {
   course: Course
-  /** Latest graded copy of the course from the server; null until the first one arrives. */
+  /** Graded copy of the course from the engine; null if it couldn't be graded. */
   graded: Course | null
   mutate: Mutate
 }

@@ -2,70 +2,55 @@
 
 A course grade calculator that handles the grading schemes used by Canvas, Blackboard and typical syllabi. You can use it for any course: enter the categories and items, then see your current grade, letter, per-category breakdown, and the average you need on the remaining work for each letter.
 
-It has two parts:
+It runs entirely in your browser and has two parts:
 
-- **`backend/`**: a Rust ([axum](https://github.com/tokio-rs/axum)) server. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver), the example courses, and import validation. It exposes them as a small JSON API and also serves the built front-end.
-- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI. It sends the course you are editing to the API and shows the results. Courses are saved in your browser (localStorage), so the server holds no user data, and they can be exported or imported as JSON.
+- **`engine/`**: the grading engine, in Rust. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver), the example courses, and import validation. It is compiled to WebAssembly with [wasm-bindgen](https://crates.io/crates/wasm-bindgen).
+- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI and calls the engine directly, so every edit is graded instantly with no server. Courses are saved in your browser (localStorage) and can be exported or imported as JSON.
 
 ## Running locally
 
-You need Rust (stable, 1.85 or newer) and Node 20 or newer.
+You need Rust (stable, 1.85 or newer) with the WebAssembly target, the `wasm-bindgen` CLI at the same version as `engine/Cargo.lock`, and Node 20 or newer:
 
 ```sh
-# Terminal 1: the API on http://localhost:3000
-cd backend
-cargo run
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.130 --locked
+```
 
-# Terminal 2: the front-end on http://localhost:5173 (proxies /api to :3000)
+Then:
+
+```sh
 cd frontend
 npm install
-npm run dev
+npm run dev        # builds the engine, then serves http://localhost:5173/grade-calculator/
+npm run build      # builds the engine and the app into frontend/dist
 ```
 
-To run it the way it is deployed (one server, one port):
+`npm run wasm` rebuilds just the engine (into `frontend/src/wasm/`, which is generated and not committed); run it again after changing Rust code while `npm run dev` is running.
+
+Tests run natively, no browser needed:
 
 ```sh
-cd frontend && npm run build && cd ../backend
-cargo run --release        # serves ../frontend/dist and the API on http://localhost:3000
+cd engine && cargo test    # unit tests, the front-end interface, and the docs/ PDF checks
 ```
 
-Tests:
+## Engine interface
 
-```sh
-cd backend && cargo test   # unit tests, API tests, and the docs/ PDF checks
-```
+[`engine/src/wasm.rs`](engine/src/wasm.rs) exports these functions to JavaScript; [`frontend/src/engine.ts`](frontend/src/engine.ts) wraps them with TypeScript types. They take and return plain objects in the same camelCase JSON shape the app stores and exports (see [`item.rs`](engine/src/item.rs), [`category.rs`](engine/src/category.rs) and [`course.rs`](engine/src/course.rs)). Errors are thrown as JS `Error`s.
 
-### Server configuration
+| Function | Returns |
+|---|---|
+| `examples()` | `[{ key, label }]` |
+| `example(key)` | a `Course` with fresh ids |
+| `blankCourse()` | a starter `Course` |
+| `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
+| `summaries(courses)` | `[{ id, percent, letter }]` |
+| `importCourses(data)` | the courses in `data` (one or a list), validated, with fresh ids |
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `PORT` / `HOST` | `3000` / `0.0.0.0` | Where to listen |
-| `STATIC_DIR` | `dist`, `../frontend/dist` or `frontend/dist`, whichever has an `index.html` | Built front-end to serve. Set to an empty string for API only. |
-| `RUST_LOG` | `info` | Log filter |
+A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`), `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
 
-The front-end calls the API on its own origin. To point a separately hosted front-end at an API somewhere else, build it with `VITE_API_URL=https://your-api.example.com` (and `VITE_BASE=/sub/path/` if it is served from a sub-path). The API allows cross-origin requests.
+## Deploying
 
-## API
-
-All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs) in `backend/src/`). A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`), `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
-
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/api/health` | | `{ "status": "ok" }` |
-| GET | `/api/examples` | | `[{ key, label }]` |
-| GET | `/api/examples/{key}` | | a `Course` with fresh ids |
-| GET | `/api/courses/blank` | | a starter `Course` |
-| POST | `/api/evaluate` | `{ course, targets: number[] }` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
-| POST | `/api/summaries` | `{ courses }` | `[{ id, percent, letter }]` |
-| POST | `/api/import` | a `Course` or a list of them | `{ courses }`, validated, with fresh ids |
-
-Errors come back as `{ "error": "..." }` with a 4xx status.
-
-## Deploying for free
-
-GitHub Pages only hosts static files, so it can't run the Rust server. The repo includes a [`Dockerfile`](Dockerfile) that builds both halves into one small image, and a [`render.yaml`](render.yaml) for [Render](https://render.com)'s free web-service tier: in the Render dashboard choose **New → Blueprint** and pick this repo. Any host that runs a Docker image and sets `PORT` works the same way. Free Render services sleep when idle, so the first request after a quiet period takes a few seconds.
-
-[CI](.github/workflows/ci.yml) runs the Rust tests, builds the front-end, and builds the Docker image on every push.
+The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted for free on GitHub Pages at https://patman1o1.github.io/grade-calculator/. [The workflow](.github/workflows/deploy.yml) tests the engine and builds the app on every push, and deploys pushes to `main`. One-time setup: repo **Settings → Pages → Source: GitHub Actions**.
 
 ## How grades are computed
 
@@ -79,11 +64,11 @@ GitHub Pages only hosts static files, so it can't run the Rust server. The repo 
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Each letter has a minimum %. |
 
-Each type is graded by its own module in `backend/src/`, none of which depend on HTTP: [`item.rs`](backend/src/item.rs) scales scores, [`category.rs`](backend/src/category.rs) applies drop rules, and [`course.rs`](backend/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
+Each type is graded by its own module in `engine/src/`, none of which depend on WebAssembly: [`item.rs`](engine/src/item.rs) scales scores, [`category.rs`](engine/src/category.rs) applies drop rules, and [`course.rs`](engine/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
 
 ## Verification against `docs/`
 
-[`backend/src/examples.rs`](backend/src/examples.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`backend/tests/courses.rs`](backend/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
+[`engine/src/examples.rs`](engine/src/examples.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`engine/tests/courses.rs`](engine/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
 
 | Course | Gradebook | PDF shows | Calculator |
 |---|---|---|---|

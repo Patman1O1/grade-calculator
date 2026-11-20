@@ -1,6 +1,6 @@
 # UML diagrams
 
-These diagrams cover the Rust server in `backend/src/` and the React front-end in `frontend/src/`. Neither side uses classes in the object-oriented sense, so the diagrams use these conventions:
+These diagrams cover the Rust engine in `engine/src/` (compiled to WebAssembly) and the React front-end in `frontend/src/`. Neither side uses classes in the object-oriented sense, so the diagrams use these conventions:
 
 | Notation | Meaning in the code |
 |---|---|
@@ -15,32 +15,32 @@ These diagrams cover the Rust server in `backend/src/` and the React front-end i
 
 ## 1. Architecture
 
-The browser keeps the courses; the server does every calculation and holds no user data.
+Everything runs in the browser. The Rust engine is compiled to a WebAssembly module that the React app loads once at startup and then calls synchronously; courses are kept in localStorage. There is no server: the built app is static files on GitHub Pages.
 
 ```mermaid
 flowchart LR
-  subgraph browser["frontend/ (React + TypeScript)"]
+  subgraph frontend["frontend/ (React + TypeScript)"]
+    main["main.tsx<br/>loadEngine(), then render"]
     App["App.tsx"]
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
     NumberInput["components/NumberInput.tsx"]
-    hooks["hooks.ts<br/>useRemote"]
-    apits["api.ts"]
+    enginets["engine.ts<br/>typed wrapper"]
+    glue["wasm/engine.js<br/>generated glue"]
     storage["storage.ts<br/>localStorage"]
     format["format.ts"]
   end
-  subgraph server["backend/ (Rust, axum)"]
-    main["main.rs<br/>binary"]
-    lib["lib.rs<br/>app()"]
-    api["api.rs<br/>/api routes"]
-    item["item.rs<br/>Item"]
+  subgraph engine["engine/ (Rust → engine_bg.wasm)"]
+    wasm["wasm.rs<br/>#[wasm_bindgen] exports"]
+    api["api.rs<br/>evaluate, summaries, import"]
+    item["item.rs<br/>Item, Status"]
     category["category.rs<br/>Category + drop search"]
     course["course.rs<br/>Course, Scheme, Cutoff, Needed"]
     examples["examples.rs"]
-    static["ServeDir<br/>frontend/dist"]
   end
 
-  App --> hooks --> apits
+  main --> App
+  App --> enginets --> glue
   App --> storage
   App -->|renders| CourseEditor
   App -->|renders| Summary
@@ -48,9 +48,9 @@ flowchart LR
   Summary --> NumberInput
   CourseEditor --> format
   Summary --> format
-  apits -->|"HTTP JSON /api/*"| api
-  main --> lib --> api
-  lib --> static
+  glue -->|"calls (JS objects via serde-wasm-bindgen)"| wasm
+  wasm --> api
+  wasm --> examples
   api --> course
   api --> examples
   examples --> course
@@ -58,7 +58,7 @@ flowchart LR
   category -->|grades| item
 ```
 
-## 2. Domain model and grading (`backend/src/item.rs`, `category.rs`, `course.rs`; mirrored in `frontend/src/types.ts`)
+## 2. Domain model and grading (`engine/src/item.rs`, `category.rs`, `course.rs`; mirrored in `frontend/src/types.ts`)
 
 A `Course` owns its categories and letter scale, and each `Category` owns its items. Each type lives in its own module together with the logic that grades it, and the grade lives on the same types: the fields marked `/` are filled in by `grade()`. `Course::grade` grades each category, and `Category::grade` grades each item and then applies its drop rules.
 
@@ -151,7 +151,7 @@ classDiagram
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all six types at the crate root.
 
-## 3. "What do I need?" (`backend/src/course.rs`)
+## 3. "What do I need?" (`engine/src/course.rs`)
 
 `Needed` is what `Course::needed_on_remaining` returns for one target percentage.
 
@@ -186,7 +186,7 @@ classDiagram
   Needed <|-- Needs
 ```
 
-## 4. Drop search (`backend/src/category.rs`, private)
+## 4. Drop search (`engine/src/category.rs`, private)
 
 ```mermaid
 classDiagram
@@ -218,7 +218,7 @@ classDiagram
 
 `Category::apply_drops` collects the graded, droppable items as `Candidate`s and calls `choose_kept`, which runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). Items marked `neverDrop` are held fixed, and at least one item always stays.
 
-## 5. Example courses (`backend/src/examples.rs`)
+## 5. Example courses (`engine/src/examples.rs`)
 
 ```mermaid
 classDiagram
@@ -254,33 +254,35 @@ classDiagram
   Example ..> Course : build()
 ```
 
-`g` builds a graded item and `u` an ungraded one; private builder methods (`with_worth`, `exclude`, `with_note`, `drop_lowest`) fill in the optional fields. Server ids contain `-s<n>` and front-end ids contain `-c<n>`, so the two never collide.
+`g` builds a graded item and `u` an ungraded one; private builder methods (`with_worth`, `exclude`, `with_note`, `drop_lowest`) fill in the optional fields. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
 
-## 6. HTTP API (`backend/src/api.rs`)
+## 6. Engine interface (`engine/src/api.rs`, `engine/src/wasm.rs`)
+
+`api.rs` holds the operations the front-end needs as plain Rust, so they are tested natively. `wasm.rs` exports them to JavaScript with `#[wasm_bindgen]`, converting arguments and results with `serde-wasm-bindgen` and turning errors into thrown JS `Error`s.
 
 ```mermaid
 classDiagram
   direction LR
+  class wasm {
+    <<module>>
+    +examples()$ ExampleInfo[]
+    +example(key: &str)$ Course
+    +blankCourse()$ Course
+    +evaluate(course: JsValue, targets: JsValue)$ Evaluation
+    +summaries(courses: JsValue)$ CourseSummary[]
+    +importCourses(data: JsValue)$ Course[]
+    -to_js(value)$ JsValue
+    -from_js(value, what)$ T
+  }
   class api {
     <<module>>
-    +MAX_TARGETS: usize = 32$
-    +MAX_COURSES: usize = 200$
-    +router()$ Router
-    +evaluate_course(req: EvaluateRequest)$ EvaluateResponse
-    -health()$ Json
-    -list_examples()$ Json
-    -get_example(key: String)$ Json~Course~
-    -get_blank()$ Json~Course~
-    -evaluate(req: EvaluateRequest)$ Json~EvaluateResponse~
-    -summaries(req: SummariesRequest)$ Json
-    -import(data: Value)$ Json
+    +NOT_A_COURSE: &str$
+    +examples()$ Vec~ExampleInfo~
+    +evaluate(course: &Course, targets: &[f64])$ Evaluation
+    +summaries(courses: Vec~Course~)$ Vec~CourseSummary~
+    +import_courses(data: Value)$ Result~Vec~Course~, &str~
   }
-  class EvaluateRequest {
-    <<struct>>
-    +course: Course
-    +targets: Vec~f64~
-  }
-  class EvaluateResponse {
+  class Evaluation {
     <<struct>>
     +course: Course
     +remaining: usize
@@ -291,30 +293,25 @@ classDiagram
     +target: f64
     +needed: Needed
   }
-  class SummariesRequest {
-    <<struct>>
-    +courses: Vec~Course~
-  }
   class CourseSummary {
     <<struct>>
     +id: String
     +percent?: f64
     +letter?: String
   }
-  class ApiError {
+  class ExampleInfo {
     <<struct>>
-    -status: StatusCode
-    -message: String
+    +key: &str
+    +label: &str
   }
-  api ..> EvaluateRequest
-  api ..> EvaluateResponse
-  EvaluateResponse *-- TargetNeed
-  api ..> SummariesRequest
+  wasm ..> api : wraps
+  api ..> Evaluation
+  Evaluation *-- TargetNeed
   api ..> CourseSummary
-  api ..> ApiError : errors
+  api ..> ExampleInfo
 ```
 
-Each private handler serves the route of the same name in the README's API table. `lib.rs` mounts `api::router()` under `/api`, serves the built front-end for every other path (falling back to `index.html`), and adds CORS, gzip and request logging. Grading runs on `spawn_blocking` threads.
+All `wasm` functions return `Result<JsValue, JsError>`; the types shown are what the JavaScript side receives.
 
 ### Editing a score
 
@@ -323,19 +320,17 @@ sequenceDiagram
   actor User
   participant Editor as CourseEditor
   participant App as App / CourseView
-  participant Hook as useRemote
-  participant Server as Rust API
+  participant Engine as engine.ts → WebAssembly
   User->>Editor: types a score
   Editor->>App: mutate(draft => …)
   App->>App: new course state, saved to localStorage
-  App->>Hook: key = JSON of course + targets
-  Hook->>Hook: wait 60 ms, abort the previous request
-  Hook->>Server: POST /api/evaluate { course, targets }
-  Server-->>Hook: { course (graded), remaining, needs }
-  Hook-->>App: data
+  App->>Engine: evaluate(course, targets)
+  Engine-->>App: { course (graded), remaining, needs }
   App->>Editor: graded course (looked up by id)
   App->>Summary: evaluation
 ```
+
+Grading happens synchronously during the render, in a few milliseconds even for courses with drop rules.
 
 ## 7. Front-end (`frontend/src/`)
 
@@ -344,16 +339,16 @@ classDiagram
   direction TB
   class App {
     <<component>>
-    -state: SavedState or null
+    -state: SavedState
     -examples: ExampleInfo[]
-    -startupError: string or null
-    -summaries: Remote~CourseSummary[]~
+    -percents: Map~string, number or null~
     -mutate: Mutate
+    -initialState()$ SavedState
   }
   class CourseView {
     <<component>>
     -custom: number or null
-    -evaluation: Remote~Evaluation~
+    -evaluation: Evaluation or error
   }
   class CourseEditor {
     <<component>>
@@ -376,35 +371,25 @@ classDiagram
     -text: string
     -prev: number or null
   }
-  class ServerBanner {
-    <<component>>
-    +message: string
-  }
-  class api {
+  class engine {
     <<module>>
-    +examples()$ Promise
-    +example(key)$ Promise
-    +blank()$ Promise
-    +evaluate(course, targets, signal)$ Promise
-    +summaries(courses, signal)$ Promise
-    +import(data)$ Promise
-  }
-  class hooks {
-    <<module>>
-    +useRemote(key, fetcher, delay)$ Remote
+    +loadEngine()$ Promise~void~
+    +examples()$ ExampleInfo[]
+    +example(key)$ Course
+    +blankCourse()$ Course
+    +evaluate(course, targets)$ Evaluation
+    +summaries(courses)$ CourseSummary[]
+    +importCourses(data)$ Course[]
   }
   App *-- "0..1" CourseView : selected course
-  App *-- "0..1" ServerBanner
   CourseView *-- CourseEditor
   CourseView *-- Summary
-  CourseView *-- "0..1" ServerBanner
   CourseEditor *-- ScaleEditor
   CourseEditor *-- "0..*" NumberInput
   ScaleEditor *-- "0..*" NumberInput
   Summary *-- NumberInput : custom target
-  App ..> api
-  App ..> hooks
-  CourseView ..> hooks
+  App ..> engine
+  CourseView ..> engine
 ```
 
-`CourseView` is keyed by course id, so switching courses starts with a fresh evaluation. `Mutate` is `(fn: (draft: Course) => void) => void`: `App` clones the selected course, lets `fn` edit the draft, and stores the result. `useRemote` keeps the last good response while a newer one is in flight, so numbers don't flicker while typing.
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` is `(fn: (draft: Course) => void) => void`: `App` clones the selected course, lets `fn` edit the draft, and stores the result.
