@@ -43,12 +43,9 @@ function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
   )
 }
 
-/** Saved courses, or every example course on a first visit. */
+/** Saved courses, or none on a first visit (examples are under "Add example…"). */
 function initialState(): SavedState {
-  const saved = loadState()
-  if (saved && saved.courses.length > 0) return saved
-  const courses = engine.examples().map((e) => engine.example(e.key))
-  return { courses, selectedId: courses[0]?.id ?? null }
+  return loadState() ?? { courses: [], selectedId: null }
 }
 
 export default function App() {

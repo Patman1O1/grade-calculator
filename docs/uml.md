@@ -1,6 +1,6 @@
 # UML diagrams
 
-These diagrams cover the Rust engine in `engine/src/` (compiled to WebAssembly) and the React front-end in `frontend/src/`. Neither side uses classes in the object-oriented sense, so the diagrams use these conventions:
+These diagrams cover the Rust engine in `backend/src/` (compiled to WebAssembly) and the React front-end in `frontend/src/`. Neither side uses classes in the object-oriented sense, so the diagrams use these conventions:
 
 | Notation | Meaning in the code |
 |---|---|
@@ -30,7 +30,7 @@ flowchart LR
     storage["storage.ts<br/>localStorage"]
     format["format.ts"]
   end
-  subgraph engine["engine/ (Rust → engine_bg.wasm)"]
+  subgraph engine["backend/ (Rust → engine_bg.wasm)"]
     wasm["wasm.rs<br/>#[wasm_bindgen] exports"]
     api["api.rs<br/>evaluate, summaries, import"]
     item["item.rs<br/>Item, Status"]
@@ -58,7 +58,7 @@ flowchart LR
   category -->|grades| item
 ```
 
-## 2. Domain model and grading (`engine/src/item.rs`, `category.rs`, `course.rs`; mirrored in `frontend/src/types.ts`)
+## 2. Domain model and grading (`backend/src/item.rs`, `category.rs`, `course.rs`; mirrored in `frontend/src/types.ts`)
 
 A `Course` owns its categories and letter scale, and each `Category` owns its items. Each type lives in its own module together with the logic that grades it, and the grade lives on the same types: the fields marked `/` are filled in by `grade()`. `Course::grade` grades each category, and `Category::grade` grades each item and then applies its drop rules.
 
@@ -151,7 +151,7 @@ classDiagram
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all six types at the crate root.
 
-## 3. "What do I need?" (`engine/src/course.rs`)
+## 3. "What do I need?" (`backend/src/course.rs`)
 
 `Needed` is what `Course::needed_on_remaining` returns for one target percentage.
 
@@ -186,7 +186,7 @@ classDiagram
   Needed <|-- Needs
 ```
 
-## 4. Drop search (`engine/src/category.rs`, private)
+## 4. Drop search (`backend/src/category.rs`, private)
 
 ```mermaid
 classDiagram
@@ -218,7 +218,7 @@ classDiagram
 
 `Category::apply_drops` collects the graded, droppable items as `Candidate`s and calls `choose_kept`, which runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). Items marked `neverDrop` are held fixed, and at least one item always stays.
 
-## 5. Example courses (`engine/src/examples.rs`)
+## 5. Example courses (`backend/src/examples.rs`)
 
 ```mermaid
 classDiagram
@@ -256,7 +256,7 @@ classDiagram
 
 `g` builds a graded item and `u` an ungraded one; private builder methods (`with_worth`, `exclude`, `with_note`, `drop_lowest`) fill in the optional fields. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
 
-## 6. Engine interface (`engine/src/api.rs`, `engine/src/wasm.rs`)
+## 6. Engine interface (`backend/src/api.rs`, `backend/src/wasm.rs`)
 
 `api.rs` holds the operations the front-end needs as plain Rust, so they are tested natively. `wasm.rs` exports them to JavaScript with `#[wasm_bindgen]`, converting arguments and results with `serde-wasm-bindgen` and turning errors into thrown JS `Error`s.
 

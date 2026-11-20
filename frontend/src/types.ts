@@ -1,6 +1,6 @@
 /**
  * Data model for a course gradebook, and the shapes the Rust engine returns.
- * These mirror engine/src/{item,category,course}.rs and engine/src/api.rs
+ * These mirror backend/src/{item,category,course}.rs and backend/src/api.rs
  * (camelCase JSON); keep the two in sync.
  *
  *  - An Item is one graded thing (a quiz, an exam, a lab). Its raw result is

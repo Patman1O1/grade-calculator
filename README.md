@@ -4,12 +4,12 @@ A course grade calculator that handles the grading schemes used by Canvas, Black
 
 It runs entirely in your browser and has two parts:
 
-- **`engine/`**: the grading engine, in Rust. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver), the example courses, and import validation. It is compiled to WebAssembly with [wasm-bindgen](https://crates.io/crates/wasm-bindgen).
-- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI and calls the engine directly, so every edit is graded instantly with no server. Courses are saved in your browser (localStorage) and can be exported or imported as JSON.
+- **`backend/`**: the grading engine, in Rust. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver), the example courses, and import validation. It is compiled to WebAssembly with [wasm-bindgen](https://crates.io/crates/wasm-bindgen).
+- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI and calls the engine directly, so every edit is graded instantly with no server. Courses are saved in your browser (localStorage) and can be exported or imported as JSON. The app starts with no courses; create one with **New**, or load one of the examples below from **Add example…**.
 
 ## Running locally
 
-You need Rust (stable, 1.85 or newer) with the WebAssembly target, the `wasm-bindgen` CLI at the same version as `engine/Cargo.lock`, and Node 20 or newer:
+You need Rust (stable, 1.85 or newer) with the WebAssembly target, the `wasm-bindgen` CLI at the same version as `backend/Cargo.lock`, and Node 20 or newer:
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -35,7 +35,7 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 
 ## Engine interface
 
-[`engine/src/wasm.rs`](engine/src/wasm.rs) exports these functions to JavaScript; [`frontend/src/engine.ts`](frontend/src/engine.ts) wraps them with TypeScript types. They take and return plain objects in the same camelCase JSON shape the app stores and exports (see [`item.rs`](engine/src/item.rs), [`category.rs`](engine/src/category.rs) and [`course.rs`](engine/src/course.rs)). Errors are thrown as JS `Error`s.
+[`backend/src/wasm.rs`](backend/src/wasm.rs) exports these functions to JavaScript; [`frontend/src/engine.ts`](frontend/src/engine.ts) wraps them with TypeScript types. They take and return plain objects in the same camelCase JSON shape the app stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs)). Errors are thrown as JS `Error`s.
 
 | Function | Returns |
 |---|---|
@@ -64,11 +64,11 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Each letter has a minimum %. |
 
-Each type is graded by its own module in `engine/src/`, none of which depend on WebAssembly: [`item.rs`](engine/src/item.rs) scales scores, [`category.rs`](engine/src/category.rs) applies drop rules, and [`course.rs`](engine/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
+Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item.rs`](backend/src/item.rs) scales scores, [`category.rs`](backend/src/category.rs) applies drop rules, and [`course.rs`](backend/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
 
 ## Verification against `docs/`
 
-[`engine/src/examples.rs`](engine/src/examples.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`engine/tests/courses.rs`](engine/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
+[`backend/src/examples.rs`](backend/src/examples.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`backend/tests/courses.rs`](backend/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
 
 | Course | Gradebook | PDF shows | Calculator |
 |---|---|---|---|

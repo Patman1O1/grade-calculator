@@ -1,5 +1,5 @@
 /**
- * Typed wrapper around the Rust grading engine (engine/src/wasm.rs), compiled
+ * Typed wrapper around the Rust grading engine (backend/src/wasm.rs), compiled
  * to WebAssembly by `npm run wasm`. Call `loadEngine()` once before using
  * anything else; after that every function is synchronous.
  */
