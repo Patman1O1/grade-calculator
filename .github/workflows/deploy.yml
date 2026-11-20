@@ -43,9 +43,9 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
           rustup default stable
-      - name: Install wasm-bindgen (same version as engine/Cargo.lock)
+      - name: Install wasm-bindgen (same version as backend/Cargo.lock)
         run: |
-          version=$(grep -A1 '^name = "wasm-bindgen"$' engine/Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          version=$(grep -A1 '^name = "wasm-bindgen"$' backend/Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
           cargo install wasm-bindgen-cli --version "$version" --locked
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
