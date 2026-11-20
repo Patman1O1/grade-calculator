@@ -15,10 +15,17 @@
 //!
 //! Everything serialises as camelCase JSON, the same shape the front-end stores
 //! and that older JSON exports of the TypeScript app used, so those still import.
+//!
+//! The grade itself lives on the same types: [`crate::engine::compute_course`]
+//! fills in each item's `counted`/`dropped`/`earned`/`possible`, each category's
+//! `earned`/`possible`/`percent`, and the course's `earned`/`possible`/`percent`/
+//! `letter`. These computed fields are `None` (and left out of the JSON) until
+//! the course is graded, and they are ignored when a course is deserialised, so
+//! a client can never send in results; they are always recomputed.
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Scheme {
     /// Sum of points earned / sum of points possible across all categories.
@@ -26,6 +33,7 @@ pub enum Scheme {
     /// Each category's percentage multiplied by its weight. Categories with no
     /// graded work are left out and the remaining weights are renormalised
     /// (what Canvas and most syllabi do mid-semester).
+    #[default]
     Weighted,
 }
 
@@ -33,7 +41,7 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
     #[serde(default)]
@@ -55,6 +63,19 @@ pub struct Item {
     /// Free-form note shown in the UI (e.g. due date).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+
+    // Computed by the engine (see the module docs).
+    /// Item is graded, not excluded and not dropped.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub counted: Option<bool>,
+    /// Removed by a drop-lowest / drop-highest rule.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub dropped: Option<bool>,
+    /// Contribution to the category: score / outOf * worth (raw score for extra credit).
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub earned: Option<f64>,
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub possible: Option<f64>,
 }
 
 impl Item {
@@ -69,7 +90,7 @@ impl Item {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Category {
     #[serde(default)]
@@ -86,6 +107,16 @@ pub struct Category {
     #[serde(default, skip_serializing_if = "is_false")]
     pub extra_credit: bool,
     pub items: Vec<Item>,
+
+    // Computed by the engine (see the module docs).
+    /// Sum over counted items.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub earned: Option<f64>,
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub possible: Option<f64>,
+    /// earned / possible as a percentage; stays `None` when nothing is graded.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub percent: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -96,7 +127,7 @@ pub struct Cutoff {
     pub min: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Course {
     #[serde(default)]
@@ -111,6 +142,18 @@ pub struct Course {
     pub display_decimals: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+
+    // Computed by the engine (see the module docs).
+    /// Points scheme: totals across categories. Weighted scheme: weighted points.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub earned: Option<f64>,
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub possible: Option<f64>,
+    /// Overall percentage; stays `None` when nothing is graded.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub percent: Option<f64>,
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub letter: Option<String>,
 }
 
 impl Course {
@@ -122,42 +165,6 @@ impl Course {
             .filter(|i| i.is_remaining())
             .count()
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ItemResult {
-    pub id: String,
-    /// Item is graded, not excluded and not dropped.
-    pub counted: bool,
-    pub dropped: bool,
-    /// Contribution to the category: score / outOf * worth (raw score for extra credit).
-    pub earned: f64,
-    pub possible: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CategoryResult {
-    pub id: String,
-    pub name: String,
-    pub items: Vec<ItemResult>,
-    pub earned: f64,
-    pub possible: f64,
-    /// earned / possible as a percentage, or `None` when nothing is graded.
-    pub percent: Option<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CourseResult {
-    pub categories: Vec<CategoryResult>,
-    /// Points scheme: totals across categories. Weighted scheme: weighted points.
-    pub earned: f64,
-    pub possible: f64,
-    /// Overall percentage, or `None` when nothing is graded.
-    pub percent: Option<f64>,
-    pub letter: Option<String>,
 }
 
 /// Average needed on the remaining work to reach a target.

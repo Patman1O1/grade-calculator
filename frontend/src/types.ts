@@ -9,6 +9,11 @@
  *  - A Category groups items, may drop the lowest/highest results, and carries a
  *    weight when the course is weighted.
  *  - A Course combines categories either by total points or by weights.
+ *
+ * The grade lives on the same types. Fields marked "computed" are filled in
+ * by the server (`POST /api/evaluate` returns the graded course); they are
+ * absent on the courses the browser stores and exports, and the server
+ * ignores them on input.
  */
 
 export type Scheme = 'points' | 'weighted'
@@ -28,6 +33,15 @@ export interface Item {
   neverDrop?: boolean
   /** Free-form note shown in the UI (e.g. due date). */
   note?: string
+
+  /** Computed: graded, not excluded and not dropped. */
+  counted?: boolean
+  /** Computed: removed by a drop-lowest / drop-highest rule. */
+  dropped?: boolean
+  /** Computed: contribution to the category, score / outOf * worth (raw score for extra credit). */
+  earned?: number
+  /** Computed. */
+  possible?: number
 }
 
 export interface Category {
@@ -40,6 +54,13 @@ export interface Category {
   /** Weighted scheme only: adds to the grade without adding to the denominator. */
   extraCredit?: boolean
   items: Item[]
+
+  /** Computed: sum over counted items. */
+  earned?: number
+  /** Computed. */
+  possible?: number
+  /** Computed: earned / possible as a percentage; absent when nothing is graded. */
+  percent?: number
 }
 
 export interface Cutoff {
@@ -58,41 +79,20 @@ export interface Course {
   /** Decimal places the course's own gradebook shows for percentages. */
   displayDecimals?: number
   notes?: string
+
+  /** Computed: points scheme, totals across categories; weighted scheme, weighted points. */
+  earned?: number
+  /** Computed. */
+  possible?: number
+  /** Computed: overall percentage; absent when nothing is graded. */
+  percent?: number
+  /** Computed. */
+  letter?: string
 }
 
 // ---------------------------------------------------------------------------
-// API results
+// API responses
 // ---------------------------------------------------------------------------
-
-export interface ItemResult {
-  id: string
-  /** Item is graded, not excluded and not dropped. */
-  counted: boolean
-  dropped: boolean
-  /** Contribution to the category: score / outOf * worth (raw score for extra credit). */
-  earned: number
-  possible: number
-}
-
-export interface CategoryResult {
-  id: string
-  name: string
-  items: ItemResult[]
-  earned: number
-  possible: number
-  /** earned / possible as a percentage, or null when nothing is graded. */
-  percent: number | null
-}
-
-export interface CourseResult {
-  categories: CategoryResult[]
-  /** Points scheme: totals across categories. Weighted scheme: weighted points. */
-  earned: number
-  possible: number
-  /** Overall percentage, or null when nothing is graded. */
-  percent: number | null
-  letter: string | null
-}
 
 export type Needed =
   | { kind: 'no-remaining' }
@@ -101,7 +101,8 @@ export type Needed =
   | { kind: 'needs'; fraction: number }
 
 export interface Evaluation {
-  result: CourseResult
+  /** The course with its computed fields filled in. */
+  course: Course
   /** Ungraded items that still have points available. */
   remaining: number
   /** One entry per requested target, in request order. */

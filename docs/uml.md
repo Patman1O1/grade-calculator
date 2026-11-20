@@ -11,6 +11,7 @@ These diagrams cover the Rust server in `backend/src/` and the React front-end i
 | `«component»` | a React function component; its `useState` values appear as attributes |
 | `+` / `-` | public (`pub` / `export`) / private |
 | `?` | optional (`Option<T>` in Rust, `?` in TypeScript) |
+| `/` before a name | computed by the engine, not entered by the user (`Option<T>`, omitted from the JSON until the course is graded) |
 
 ## 1. Architecture
 
@@ -58,7 +59,7 @@ flowchart LR
 
 ## 2. Domain model (`backend/src/model.rs`, mirrored in `frontend/src/types.ts`)
 
-A `Course` owns its categories and letter scale, and each `Category` owns its items.
+A `Course` owns its categories and letter scale, and each `Category` owns its items. The grade lives on the same types: the fields marked `/` are filled in by `engine::compute_course`.
 
 ```mermaid
 classDiagram
@@ -77,6 +78,10 @@ classDiagram
     +scale: Vec~Cutoff~
     +displayDecimals?: u32
     +notes?: String
+    +/earned?: f64
+    +/possible?: f64
+    +/percent?: f64
+    +/letter?: String
     +remaining_count() usize
   }
   class Category {
@@ -88,6 +93,9 @@ classDiagram
     +dropHighest?: f64
     +extraCredit: bool
     +items: Vec~Item~
+    +/earned?: f64
+    +/possible?: f64
+    +/percent?: f64
   }
   class Item {
     <<struct>>
@@ -99,6 +107,10 @@ classDiagram
     +excluded: bool
     +neverDrop: bool
     +note?: String
+    +/counted?: bool
+    +/dropped?: bool
+    +/earned?: f64
+    +/possible?: f64
     +worth() f64
     +is_remaining() bool
   }
@@ -113,40 +125,18 @@ classDiagram
   Course --> "1" Scheme : scheme
 ```
 
-`excluded`, `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false, so the JSON matches what the TypeScript-only version of the app exported.
+- `excluded`, `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false, so the JSON matches what the TypeScript-only version of the app exported.
+- The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
+- On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
+- Every node keeps its `id`, so the front-end matches graded values to rows by id. An evaluation that is one keystroke behind never lands on the wrong row.
 
-## 3. Results (`backend/src/model.rs`)
+## 3. "What do I need?" (`backend/src/model.rs`)
 
-The engine returns a result tree that mirrors the course tree. Each result node carries the `id` of the input node it was computed from; the front-end looks results up by id, so a result that is one keystroke behind never lands on the wrong row. `Needed` is what the "what do I need?" solver returns.
+`Needed` is what `engine::needed_on_remaining` returns for one target percentage.
 
 ```mermaid
 classDiagram
   direction LR
-  class CourseResult {
-    <<struct>>
-    +categories: Vec~CategoryResult~
-    +earned: f64
-    +possible: f64
-    +percent?: f64
-    +letter?: String
-  }
-  class CategoryResult {
-    <<struct>>
-    +id: String
-    +name: String
-    +items: Vec~ItemResult~
-    +earned: f64
-    +possible: f64
-    +percent?: f64
-  }
-  class ItemResult {
-    <<struct>>
-    +id: String
-    +counted: bool
-    +dropped: bool
-    +earned: f64
-    +possible: f64
-  }
   class Needed {
     <<enum>>
     +kind: String
@@ -169,8 +159,6 @@ classDiagram
     +kind = "needs"
     +fraction: f64
   }
-  CourseResult "1" *-- "0..*" CategoryResult : categories
-  CategoryResult "1" *-- "0..*" ItemResult : items
   Needed <|-- NoRemaining
   Needed <|-- Secured
   Needed <|-- Impossible
@@ -187,9 +175,10 @@ classDiagram
     -contribution(item: &Item, score: f64)$ (f64, f64)
     -choose_kept(candidates: &[Candidate], keep: usize, fixed_earned: f64, fixed_possible: f64, mode: Mode)$ Vec~usize~
     -drop_count(n: Option~f64~)$ usize
-    +compute_category(category: &Category)$ CategoryResult
+    +compute_category(category: &mut Category)$ ()
     +letter_for(percent: Option~f64~, scale: &[Cutoff])$ Option~String~
-    +compute_course(course: &Course)$ CourseResult
+    +compute_course(course: &mut Course)$ ()
+    +graded(course: &Course)$ Course
     +with_remaining_at(course: &Course, fraction: f64)$ Course
     +needed_on_remaining(course: &Course, target: f64)$ Needed
     +round(x: f64, decimals: u32)$ f64
@@ -207,12 +196,11 @@ classDiagram
   }
   engine ..> Candidate : drop search
   engine ..> Mode : drop lowest / highest
-  engine ..> Course : reads
-  engine ..> CourseResult : creates
+  engine ..> Course : grades in place
   engine ..> Needed : returns
 ```
 
-`Candidate` and `Mode` are private. `choose_kept` runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). `needed_on_remaining` bisects on the score given to every remaining item, recomputing the course each step.
+`compute_course` and `compute_category` fill in the computed fields in place; `graded` returns a graded copy. `Candidate` and `Mode` are private. `choose_kept` runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). `needed_on_remaining` bisects on the score given to every remaining item, recomputing the course each step.
 
 ## 5. Example courses (`backend/src/examples.rs`)
 
@@ -278,7 +266,7 @@ classDiagram
   }
   class EvaluateResponse {
     <<struct>>
-    +result: CourseResult
+    +course: Course
     +remaining: usize
     +needs: Vec~TargetNeed~
   }
@@ -327,9 +315,9 @@ sequenceDiagram
   App->>Hook: key = JSON of course + targets
   Hook->>Hook: wait 60 ms, abort the previous request
   Hook->>Server: POST /api/evaluate { course, targets }
-  Server-->>Hook: { result, remaining, needs }
+  Server-->>Hook: { course (graded), remaining, needs }
   Hook-->>App: data
-  App->>Editor: result (looked up by id)
+  App->>Editor: graded course (looked up by id)
   App->>Summary: evaluation
 ```
 
@@ -354,7 +342,7 @@ classDiagram
   class CourseEditor {
     <<component>>
     +course: Course
-    +result: CourseResult or null
+    +graded: Course or null
     +mutate: Mutate
   }
   class ScaleEditor {

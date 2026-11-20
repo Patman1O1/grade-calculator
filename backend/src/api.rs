@@ -6,7 +6,7 @@
 //! | GET    | `/api/examples`         |                               | `[{ key, label }]`                        |
 //! | GET    | `/api/examples/{key}`   |                               | `Course` (fresh ids)                      |
 //! | GET    | `/api/courses/blank`    |                               | `Course` (fresh ids)                      |
-//! | POST   | `/api/evaluate`         | `{ course, targets? }`        | `{ result, remaining, needs }`            |
+//! | POST   | `/api/evaluate`         | `{ course, targets? }`        | `{ course, remaining, needs }`            |
 //! | POST   | `/api/summaries`        | `{ courses }`                 | `[{ id, percent, letter }]`               |
 //! | POST   | `/api/import`           | `Course` or `[Course]`        | `{ courses }` (validated, fresh ids)      |
 
@@ -19,9 +19,9 @@ use axum::routing::{get, post};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::engine::{compute_course, needed_on_remaining};
+use crate::engine::{compute_course, graded, needed_on_remaining};
 use crate::examples::{EXAMPLES, blank_course, example, re_id};
-use crate::model::{Course, CourseResult, Needed};
+use crate::model::{Course, Needed};
 
 /// Most targets accepted by one `/api/evaluate` call (each runs a 60-step search).
 pub const MAX_TARGETS: usize = 32;
@@ -130,7 +130,8 @@ pub struct TargetNeed {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EvaluateResponse {
-    pub result: CourseResult,
+    /// The course with its computed fields (grade, category and item results) filled in.
+    pub course: Course,
     /// Ungraded items that still have points available.
     pub remaining: usize,
     /// One entry per requested target, in the same order.
@@ -138,7 +139,7 @@ pub struct EvaluateResponse {
 }
 
 pub fn evaluate_course(req: EvaluateRequest) -> EvaluateResponse {
-    let result = compute_course(&req.course);
+    let course = graded(&req.course);
     let needs = req
         .targets
         .iter()
@@ -148,7 +149,7 @@ pub fn evaluate_course(req: EvaluateRequest) -> EvaluateResponse {
         })
         .collect();
     EvaluateResponse {
-        result,
+        course,
         remaining: req.course.remaining_count(),
         needs,
     }
@@ -187,13 +188,13 @@ async fn summaries(
     }
     let out = blocking(move || {
         req.courses
-            .iter()
-            .map(|c| {
-                let r = compute_course(c);
+            .into_iter()
+            .map(|mut c| {
+                compute_course(&mut c);
                 CourseSummary {
-                    id: c.id.clone(),
-                    percent: r.percent,
-                    letter: r.letter,
+                    id: c.id,
+                    percent: c.percent,
+                    letter: c.letter,
                 }
             })
             .collect()

@@ -29,7 +29,7 @@ function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
     <>
       {evaluation.error && <ServerBanner message={evaluation.error} />}
       <main className="layout">
-        <CourseEditor course={course} result={data?.result ?? null} mutate={mutate} />
+        <CourseEditor course={course} graded={data?.course ?? null} mutate={mutate} />
         <Summary course={course} evaluation={data} custom={custom} onCustom={setCustom} />
       </main>
     </>

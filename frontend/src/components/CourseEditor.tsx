@@ -1,4 +1,4 @@
-import type { CategoryResult, Course, CourseResult, Cutoff, ItemResult } from '../types'
+import type { Category, Course, Cutoff, Item } from '../types'
 import { formatNumber, formatPercent, newId } from '../format'
 import { NumberInput } from './NumberInput'
 
@@ -6,19 +6,19 @@ export type Mutate = (fn: (draft: Course) => void) => void
 
 interface Props {
   course: Course
-  /** Latest result from the server; null until the first one arrives. */
-  result: CourseResult | null
+  /** Latest graded copy of the course from the server; null until the first one arrives. */
+  graded: Course | null
   mutate: Mutate
 }
 
 const PENDING = '…'
 
-export function CourseEditor({ course, result, mutate }: Props) {
+export function CourseEditor({ course, graded, mutate }: Props) {
   const weighted = course.scheme === 'weighted'
   const decimals = course.displayDecimals ?? 2
-  // Look results up by id: while a new result is on its way, the latest one may
-  // be a keystroke behind (e.g. missing an item that was just added).
-  const categoryResults = new Map<string, CategoryResult>(result?.categories.map((c) => [c.id, c]))
+  // Look graded values up by id: while a new evaluation is on its way, the latest
+  // one may be a keystroke behind (e.g. missing an item that was just added).
+  const gradedCategories = new Map<string, Category>(graded?.categories.map((c) => [c.id, c]))
   const totalWeight = course.categories.reduce((s, c) => s + (c.extraCredit ? 0 : c.weight), 0)
 
   return (
@@ -55,8 +55,8 @@ export function CourseEditor({ course, result, mutate }: Props) {
       </section>
 
       {course.categories.map((cat, ci) => {
-        const cr = categoryResults.get(cat.id)
-        const itemResults = new Map<string, ItemResult>(cr?.items.map((i) => [i.id, i]))
+        const gc = gradedCategories.get(cat.id)
+        const gradedItems = new Map<string, Item>(gc?.items.map((i) => [i.id, i]))
         const hasDrops = (cat.dropLowest ?? 0) > 0 || (cat.dropHighest ?? 0) > 0
         return (
           <section className="panel category" key={cat.id}>
@@ -68,9 +68,9 @@ export function CourseEditor({ course, result, mutate }: Props) {
                 onChange={(e) => mutate((d) => void (d.categories[ci].name = e.target.value))}
               />
               <span className="category-score">
-                {cr ? formatPercent(cr.percent, decimals) : PENDING}
+                {gc ? formatPercent(gc.percent, decimals) : PENDING}
                 <small>
-                  {cr ? `${formatNumber(cr.earned, decimals)} / ${formatNumber(cr.possible, decimals)}` : ''}
+                  {gc ? `${formatNumber(gc.earned ?? 0, decimals)} / ${formatNumber(gc.possible ?? 0, decimals)}` : ''}
                 </small>
               </span>
               <button
@@ -141,10 +141,10 @@ export function CourseEditor({ course, result, mutate }: Props) {
               </thead>
               <tbody>
                 {cat.items.map((item, ii) => {
-                  const ir = itemResults.get(item.id)
+                  const gi = gradedItems.get(item.id)
                   const state = item.excluded
                     ? 'excluded'
-                    : ir?.dropped
+                    : gi?.dropped
                       ? 'dropped'
                       : item.score === null
                         ? 'pending'
@@ -201,8 +201,8 @@ export function CourseEditor({ course, result, mutate }: Props) {
                           <span className="tag">excluded</span>
                         ) : state === 'pending' ? (
                           <span className="muted">—</span>
-                        ) : ir ? (
-                          `${formatNumber(ir.earned, decimals)} / ${formatNumber(ir.possible, decimals)}`
+                        ) : gi ? (
+                          `${formatNumber(gi.earned ?? 0, decimals)} / ${formatNumber(gi.possible ?? 0, decimals)}`
                         ) : (
                           <span className="muted">{PENDING}</span>
                         )}

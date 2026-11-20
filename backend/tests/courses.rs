@@ -1,12 +1,12 @@
 //! Every expected value below is copied from docs/<course>/grades-11-5-2026.pdf
 //! (and rounded the same way the gradebook displays it).
 
-use grade_calculator::engine::{compute_course, round};
+use grade_calculator::engine::{graded, round};
 use grade_calculator::examples::{cs401, cs411, cs440, math218, math218_canvas};
-use grade_calculator::model::CourseResult;
+use grade_calculator::model::Course;
 
 /// `(percent, earned, possible)` of a category, rounded to 2 places.
-fn category(r: &CourseResult, name: &str) -> (Option<f64>, f64, f64) {
+fn category(r: &Course, name: &str) -> (Option<f64>, f64, f64) {
     let c = r
         .categories
         .iter()
@@ -14,18 +14,18 @@ fn category(r: &CourseResult, name: &str) -> (Option<f64>, f64, f64) {
         .unwrap_or_else(|| panic!("no category {name}"));
     (
         c.percent.map(|p| round(p, 2)),
-        round(c.earned, 2),
-        round(c.possible, 2),
+        round(c.earned.unwrap(), 2),
+        round(c.possible.unwrap(), 2),
     )
 }
 
 #[test]
 fn cs401_canvas_total_points() {
-    let r = compute_course(&cs401());
+    let r = graded(&cs401());
     // Total 56.95% (106.50 / 187.00)
     assert_eq!(round(r.percent.unwrap(), 2), 56.95);
-    assert_eq!(round(r.earned, 2), 106.5);
-    assert_eq!(round(r.possible, 2), 187.0);
+    assert_eq!(round(r.earned.unwrap(), 2), 106.5);
+    assert_eq!(round(r.possible.unwrap(), 2), 187.0);
 
     assert_eq!(category(&r, "Homework"), (Some(97.92), 70.5, 72.0));
     assert_eq!(category(&r, "Check-Ins"), (Some(66.67), 10.0, 15.0));
@@ -36,8 +36,7 @@ fn cs401_canvas_total_points() {
 
 #[test]
 fn cs411_canvas_weighted_drop_lowest_two() {
-    let course = cs411();
-    let r = compute_course(&course);
+    let r = graded(&cs411());
     // Total 79.53%
     assert_eq!(round(r.percent.unwrap(), 2), 79.53);
 
@@ -54,13 +53,12 @@ fn cs411_canvas_weighted_drop_lowest_two() {
 
     // Drops the two lowest quizzes and labs. Quiz 04 and Quiz 05 are both 8/10,
     // so dropping either one is equivalent.
-    let mut dropped: Vec<&str> = course
+    let mut dropped: Vec<&str> = r
         .categories
         .iter()
-        .zip(&r.categories)
-        .flat_map(|(c, cr)| c.items.iter().zip(&cr.items))
-        .filter(|(_, ir)| ir.dropped)
-        .map(|(i, _)| i.name.as_str())
+        .flat_map(|c| &c.items)
+        .filter(|i| i.dropped == Some(true))
+        .map(|i| i.name.as_str())
         .collect();
     dropped.sort();
     let tied = |d: &&str| *d == "Quiz 04" || *d == "Quiz 05";
@@ -77,21 +75,21 @@ fn cs411_canvas_weighted_drop_lowest_two() {
 
 #[test]
 fn cs440_blackboard_scaled_points() {
-    let r = compute_course(&cs440());
+    let r = graded(&cs440());
     // Total (out of 67) 52.6
-    assert_eq!(round(r.possible, 1), 67.0);
-    assert_eq!(round(r.earned, 1), 52.6);
+    assert_eq!(round(r.possible.unwrap(), 1), 67.0);
+    assert_eq!(round(r.earned.unwrap(), 1), 52.6);
     // PPP (Based on % of 67) 78.4
     assert_eq!(round(r.percent.unwrap(), 1), 78.4);
 }
 
 #[test]
 fn math218_canvas_total_points() {
-    let r = compute_course(&math218_canvas());
+    let r = graded(&math218_canvas());
     // Total 118.28% (241.29 / 204.00)
     assert_eq!(round(r.percent.unwrap(), 2), 118.28);
-    assert_eq!(round(r.earned, 2), 241.29);
-    assert_eq!(round(r.possible, 2), 204.0);
+    assert_eq!(round(r.earned.unwrap(), 2), 241.29);
+    assert_eq!(round(r.possible.unwrap(), 2), 204.0);
     assert_eq!(
         category(&r, "Written Homework group"),
         (Some(96.3), 52.0, 54.0)
@@ -124,12 +122,12 @@ fn math218_syllabus_weighting_reproduces_posted_midsemester_score() {
             }
         }
     }
-    assert_eq!(round(compute_course(&course).percent.unwrap(), 2), 65.39);
+    assert_eq!(round(graded(&course).percent.unwrap(), 2), 65.39);
 }
 
 #[test]
 fn math218_syllabus_weighting_today() {
-    let r = compute_course(&math218());
+    let r = graded(&math218());
     // MOM: drop 18.6 → 79.3/80; Written: drop 16 → 36/36; Exams: 52%.
     assert_eq!(category(&r, "MOM Homework (online)").0, Some(99.13));
     assert_eq!(category(&r, "Written Homework").0, Some(100.0));

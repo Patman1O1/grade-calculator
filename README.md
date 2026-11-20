@@ -47,7 +47,7 @@ The front-end calls the API on its own origin. To point a separately hosted fron
 
 ## API
 
-All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`backend/src/model.rs`](backend/src/model.rs)).
+All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`backend/src/model.rs`](backend/src/model.rs)). A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `counted`, `dropped`, `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -55,7 +55,7 @@ All bodies are JSON in the same camelCase shape the front-end stores and exports
 | GET | `/api/examples` | | `[{ key, label }]` |
 | GET | `/api/examples/{key}` | | a `Course` with fresh ids |
 | GET | `/api/courses/blank` | | a starter `Course` |
-| POST | `/api/evaluate` | `{ course, targets: number[] }` | `{ result, remaining, needs: [{ target, needed }] }` |
+| POST | `/api/evaluate` | `{ course, targets: number[] }` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
 | POST | `/api/summaries` | `{ courses }` | `[{ id, percent, letter }]` |
 | POST | `/api/import` | a `Course` or a list of them | `{ courses }`, validated, with fresh ids |
 

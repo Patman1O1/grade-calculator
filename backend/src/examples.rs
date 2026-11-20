@@ -38,9 +38,7 @@ fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
         score,
         out_of,
         worth: None,
-        excluded: false,
-        never_drop: false,
-        note: None,
+        ..Default::default()
     }
 }
 
@@ -75,9 +73,8 @@ fn category(name: &str, weight: f64, items: Vec<Item>) -> Category {
         name: name.to_owned(),
         weight,
         drop_lowest: None,
-        drop_highest: None,
-        extra_credit: false,
         items,
+        ..Default::default()
     }
 }
 
@@ -124,6 +121,7 @@ fn course(
         scale,
         display_decimals: Some(decimals),
         notes: Some(notes.to_owned()),
+        ..Default::default()
     }
 }
 
@@ -503,6 +501,6 @@ pub fn blank_course() -> Course {
         ],
         scale: standard_scale(),
         display_decimals: Some(2),
-        notes: None,
+        ..Default::default()
     }
 }

@@ -46,6 +46,10 @@ async fn lists_and_builds_examples() {
     assert_eq!(course["scheme"], "weighted");
     assert_eq!(course["categories"][0]["dropLowest"], 2.0);
     assert!(course["id"].as_str().unwrap().starts_with("course-"));
+    // Ungraded courses carry no computed fields.
+    assert!(course.get("percent").is_none());
+    assert!(course["categories"][0].get("earned").is_none());
+    assert!(course["categories"][0]["items"][0].get("counted").is_none());
 
     let (status, err) = call("GET", "/api/examples/nope", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -76,9 +80,17 @@ async fn evaluates_a_course_and_solves_targets() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{out}");
-    assert_eq!(out["result"]["percent"], 60.0);
-    assert_eq!(out["result"]["letter"], "F");
-    assert_eq!(out["result"]["categories"][0]["items"][1]["counted"], false);
+    let graded = &out["course"];
+    assert_eq!(graded["name"], "Test");
+    assert_eq!(graded["percent"], 60.0);
+    assert_eq!(graded["letter"], "F");
+    assert_eq!(graded["earned"], 60.0);
+    assert_eq!(graded["categories"][0]["percent"], 60.0);
+    let items = &graded["categories"][0]["items"];
+    assert_eq!(items[0]["counted"], true);
+    assert_eq!(items[0]["earned"], 60.0);
+    assert_eq!(items[1]["counted"], false);
+    assert_eq!(items[1]["score"], Value::Null);
     assert_eq!(out["remaining"], 1);
     assert_eq!(out["needs"][0]["target"], 80.0);
     assert_eq!(out["needs"][0]["needed"]["kind"], "needs");
@@ -128,6 +140,22 @@ async fn import_validates_and_reassigns_ids() {
         out["courses"][0]["categories"][0]["items"][0]["neverDrop"],
         true
     );
+
+    // Computed fields sent by a client are ignored, not trusted.
+    let forged = json!({ "name": "F", "scheme": "points", "scale": [], "percent": 100, "letter": "A",
+        "categories": [{ "name": "C", "weight": 0, "earned": 99,
+            "items": [{ "name": "I", "score": 0, "outOf": 10, "earned": 10, "counted": true }] }] });
+    let (_, out) = call("POST", "/api/import", Some(forged.clone())).await;
+    assert!(out["courses"][0].get("percent").is_none());
+    assert!(
+        out["courses"][0]["categories"][0]["items"][0]
+            .get("earned")
+            .is_none()
+    );
+    let (_, out) = call("POST", "/api/evaluate", Some(json!({ "course": forged }))).await;
+    assert_eq!(out["course"]["percent"], 0.0);
+    assert_eq!(out["course"]["letter"], Value::Null);
+    assert_eq!(out["course"]["categories"][0]["items"][0]["earned"], 0.0);
 
     let (status, err) = call("POST", "/api/import", Some(json!({ "hello": 1 }))).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);

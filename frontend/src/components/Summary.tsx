@@ -42,7 +42,8 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
     )
   }
 
-  const { result, remaining, needs } = evaluation
+  const { course: graded, remaining, needs } = evaluation
+  const gradedPossible = graded.possible ?? 0
   const needFor = (target: number) => needs.find((n) => n.target === target)?.needed
 
   return (
@@ -50,17 +51,17 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
       <section className="panel total">
         <span className="label">Current grade</span>
         <div className="big">
-          <span className="pct">{formatPercent(result.percent, decimals)}</span>
-          {result.letter && <span className="letter">{result.letter}</span>}
+          <span className="pct">{formatPercent(graded.percent, decimals)}</span>
+          {graded.letter && <span className="letter">{graded.letter}</span>}
         </div>
         {course.scheme === 'points' && (
           <span className="sub">
-            {formatNumber(result.earned, decimals)} / {formatNumber(result.possible, decimals)} points
+            {formatNumber(graded.earned ?? 0, decimals)} / {formatNumber(gradedPossible, decimals)} points
           </span>
         )}
-        {weighted && result.possible > 0 && (
+        {weighted && gradedPossible > 0 && (
           <span className="sub">
-            Based on {formatNumber(result.possible, 2).replace(/\.?0+$/, '')}
+            Based on {formatNumber(gradedPossible, 2).replace(/\.?0+$/, '')}
             {' '}weight of graded categories
           </span>
         )}
@@ -70,14 +71,14 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
         <h3>Breakdown</h3>
         <ul>
           {course.categories.map((category) => {
-            const c = result.categories.find((r) => r.id === category.id)
+            const c = graded.categories.find((g) => g.id === category.id)
             if (!c) return null
             const share =
-              weighted && result.possible > 0 && c.percent !== null && category.weight > 0
-                ? (category.weight / result.possible) * 100
+              weighted && gradedPossible > 0 && c.percent !== undefined && category.weight > 0
+                ? (category.weight / gradedPossible) * 100
                 : null
             return (
-              <li key={category.id} className={c.percent === null ? 'empty' : ''}>
+              <li key={category.id} className={c.percent === undefined ? 'empty' : ''}>
                 <div className="row">
                   <span className="cname">{category.name}</span>
                   <span className="cpct">{formatPercent(c.percent, decimals)}</span>
@@ -87,7 +88,7 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
                 </div>
                 <div className="row meta">
                   <span>
-                    {formatNumber(c.earned, decimals)} / {formatNumber(c.possible, decimals)}
+                    {formatNumber(c.earned ?? 0, decimals)} / {formatNumber(c.possible ?? 0, decimals)}
                   </span>
                   {weighted && (
                     <span>

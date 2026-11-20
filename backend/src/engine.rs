@@ -2,9 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::model::{
-    Category, CategoryResult, Course, CourseResult, Cutoff, Item, ItemResult, Needed, Scheme,
-};
+use crate::model::{Category, Course, Cutoff, Item, Needed, Scheme};
 
 /// Points an item contributes to its category, given a score: `(earned, possible)`.
 fn contribution(item: &Item, score: f64) -> (f64, f64) {
@@ -127,24 +125,22 @@ fn drop_count(n: Option<f64>) -> usize {
     }
 }
 
-pub fn compute_category(category: &Category) -> CategoryResult {
-    let mut items: Vec<ItemResult> = category
+/// Grade a category in place: fills in every item's `counted`, `dropped`,
+/// `earned` and `possible`, and the category's `earned`, `possible` and `percent`.
+pub fn compute_category(category: &mut Category) {
+    // (counted, earned, possible) per item.
+    let mut scores: Vec<(bool, f64, f64)> = category
         .items
         .iter()
-        .map(|item| {
-            let (counted, (earned, possible)) = match item.score {
-                Some(score) if !item.excluded => (true, contribution(item, score)),
-                _ => (false, (0.0, 0.0)),
-            };
-            ItemResult {
-                id: item.id.clone(),
-                counted,
-                dropped: false,
-                earned,
-                possible,
+        .map(|item| match item.score {
+            Some(score) if !item.excluded => {
+                let (earned, possible) = contribution(item, score);
+                (true, earned, possible)
             }
+            _ => (false, 0.0, 0.0),
         })
         .collect();
+    let mut dropped = vec![false; scores.len()];
 
     let drop_lowest = drop_count(category.drop_lowest);
     let drop_highest = drop_count(category.drop_highest);
@@ -152,16 +148,19 @@ pub fn compute_category(category: &Category) -> CategoryResult {
         let never_drop = |i: usize| category.items[i].never_drop;
         let (mut fixed_earned, mut fixed_possible, mut fixed_count) = (0.0, 0.0, 0usize);
         let mut pool: Vec<Candidate> = Vec::new();
-        for (index, r) in items.iter().enumerate().filter(|(_, r)| r.counted) {
+        for (index, &(counted, earned, possible)) in scores.iter().enumerate() {
+            if !counted {
+                continue;
+            }
             if never_drop(index) {
-                fixed_earned += r.earned;
-                fixed_possible += r.possible;
+                fixed_earned += earned;
+                fixed_possible += possible;
                 fixed_count += 1;
             } else {
                 pool.push(Candidate {
                     index,
-                    earned: r.earned,
-                    possible: r.possible,
+                    earned,
+                    possible,
                 });
             }
         }
@@ -191,26 +190,30 @@ pub fn compute_category(category: &Category) -> CategoryResult {
             pool.retain(|c| kept.contains(&c.index));
         }
 
-        for (index, r) in items.iter_mut().enumerate() {
-            if r.counted && !never_drop(index) && !pool.iter().any(|c| c.index == index) {
-                r.counted = false;
-                r.dropped = true;
+        for (index, score) in scores.iter_mut().enumerate() {
+            if score.0 && !never_drop(index) && !pool.iter().any(|c| c.index == index) {
+                score.0 = false;
+                dropped[index] = true;
             }
         }
     }
 
-    let (earned, possible) = items
-        .iter()
-        .filter(|r| r.counted)
-        .fold((0.0, 0.0), |(e, p), r| (e + r.earned, p + r.possible));
-    CategoryResult {
-        id: category.id.clone(),
-        name: category.name.clone(),
-        items,
-        earned,
-        possible,
-        percent: (possible > 0.0).then(|| earned / possible * 100.0),
+    let (mut earned, mut possible) = (0.0, 0.0);
+    for ((item, (counted, item_earned, item_possible)), was_dropped) in
+        category.items.iter_mut().zip(scores).zip(dropped)
+    {
+        item.counted = Some(counted);
+        item.dropped = Some(was_dropped);
+        item.earned = Some(item_earned);
+        item.possible = Some(item_possible);
+        if counted {
+            earned += item_earned;
+            possible += item_possible;
+        }
     }
+    category.earned = Some(earned);
+    category.possible = Some(possible);
+    category.percent = (possible > 0.0).then(|| earned / possible * 100.0);
 }
 
 /// Letter for a percentage: the highest cutoff it reaches, or the lowest letter.
@@ -226,28 +229,30 @@ pub fn letter_for(percent: Option<f64>, scale: &[Cutoff]) -> Option<String> {
         .map(|c| c.letter.clone())
 }
 
-pub fn compute_course(course: &Course) -> CourseResult {
-    let categories: Vec<CategoryResult> = course.categories.iter().map(compute_category).collect();
+/// Grade a course in place: grades every category (and item), then fills in
+/// the course's `earned`, `possible`, `percent` and `letter`.
+pub fn compute_course(course: &mut Course) {
+    course.categories.iter_mut().for_each(compute_category);
     let mut earned = 0.0;
     let mut possible = 0.0;
 
     match course.scheme {
         Scheme::Points => {
-            for c in &categories {
-                earned += c.earned;
-                possible += c.possible;
+            for c in &course.categories {
+                earned += c.earned.unwrap_or(0.0);
+                possible += c.possible.unwrap_or(0.0);
             }
         }
         Scheme::Weighted => {
-            for (cat, c) in course.categories.iter().zip(&categories) {
-                let w = cat.weight;
+            for c in &course.categories {
+                let w = c.weight;
                 let Some(percent) = c.percent else { continue };
                 // Skips zero, negative and NaN weights alike.
                 if w.partial_cmp(&0.0) != Some(Ordering::Greater) {
                     continue;
                 }
                 earned += w * percent / 100.0;
-                if !cat.extra_credit {
+                if !c.extra_credit {
                     possible += w;
                 }
             }
@@ -255,13 +260,17 @@ pub fn compute_course(course: &Course) -> CourseResult {
     }
 
     let percent = (possible > 0.0).then(|| earned / possible * 100.0);
-    CourseResult {
-        categories,
-        earned,
-        possible,
-        percent,
-        letter: letter_for(percent, &course.scale),
-    }
+    course.earned = Some(earned);
+    course.possible = Some(possible);
+    course.percent = percent;
+    course.letter = letter_for(percent, &course.scale);
+}
+
+/// A graded copy of the course.
+pub fn graded(course: &Course) -> Course {
+    let mut c = course.clone();
+    compute_course(&mut c);
+    c
 }
 
 /// Copy of the course with every remaining item scored at `fraction` of its points.
@@ -283,9 +292,9 @@ pub fn needed_on_remaining(course: &Course, target: f64) -> Needed {
         return Needed::NoRemaining;
     }
     let at = |f: f64| {
-        compute_course(&with_remaining_at(course, f))
-            .percent
-            .unwrap_or(0.0)
+        let mut c = with_remaining_at(course, f);
+        compute_course(&mut c);
+        c.percent.unwrap_or(0.0)
     };
     if at(0.0) + 1e-9 >= target {
         return Needed::Secured;
@@ -317,7 +326,6 @@ pub fn round(x: f64, decimals: u32) -> f64 {
 mod tests {
     use super::*;
     use crate::examples::standard_scale;
-    use crate::model::Category;
 
     fn item(score: Option<f64>, out_of: f64) -> Item {
         Item {
@@ -325,22 +333,14 @@ mod tests {
             name: String::new(),
             score,
             out_of,
-            worth: None,
-            excluded: false,
-            never_drop: false,
-            note: None,
+            ..Default::default()
         }
     }
 
     fn cat(items: Vec<Item>) -> Category {
         Category {
-            id: String::new(),
-            name: String::new(),
-            weight: 0.0,
-            drop_lowest: None,
-            drop_highest: None,
-            extra_credit: false,
             items,
+            ..Default::default()
         }
     }
 
@@ -351,13 +351,17 @@ mod tests {
             scheme,
             categories,
             scale: standard_scale(),
-            display_decimals: None,
-            notes: None,
+            ..Default::default()
         }
     }
 
-    fn dropped(r: &CategoryResult) -> Vec<bool> {
-        r.items.iter().map(|i| i.dropped).collect()
+    fn graded_cat(mut c: Category) -> Category {
+        compute_category(&mut c);
+        c
+    }
+
+    fn dropped(c: &Category) -> Vec<bool> {
+        c.items.iter().map(|i| i.dropped == Some(true)).collect()
     }
 
     #[test]
@@ -369,7 +373,7 @@ mod tests {
             item(Some(10.0), 10.0),
         ]);
         c.drop_lowest = Some(1.0);
-        let r = compute_category(&c);
+        let r = graded_cat(c);
         assert_eq!(dropped(&r), [false, true, false]);
         assert_eq!(round(r.percent.unwrap(), 2), 90.91);
     }
@@ -382,7 +386,7 @@ mod tests {
             item(Some(7.0), 10.0),
         ]);
         c.drop_highest = Some(1.0);
-        let r = compute_category(&c);
+        let r = graded_cat(c);
         assert_eq!(dropped(&r), [true, false, false]);
         assert_eq!(r.percent, Some(60.0));
     }
@@ -393,11 +397,11 @@ mod tests {
         keep.never_drop = true;
         let mut c = cat(vec![keep, item(Some(5.0), 10.0)]);
         c.drop_lowest = Some(1.0);
-        assert_eq!(dropped(&compute_category(&c)), [false, true]);
+        assert_eq!(dropped(&graded_cat(c)), [false, true]);
 
         let mut single = cat(vec![item(Some(2.0), 10.0)]);
         single.drop_lowest = Some(3.0);
-        assert_eq!(compute_category(&single).percent, Some(20.0));
+        assert_eq!(graded_cat(single).percent, Some(20.0));
     }
 
     #[test]
@@ -411,23 +415,23 @@ mod tests {
             item(Some(8.0), 10.0),
         ]);
         c.drop_lowest = Some(1.0);
-        assert_eq!(compute_category(&c).percent, Some(80.0));
+        assert_eq!(graded_cat(c).percent, Some(80.0));
     }
 
     #[test]
     fn scales_a_raw_score_to_its_worth() {
         let mut i = item(Some(85.0), 100.0);
         i.worth = Some(10.0);
-        let r = compute_category(&cat(vec![i]));
-        assert!((r.earned - 8.5).abs() < 1e-9);
-        assert_eq!(r.possible, 10.0);
+        let r = graded_cat(cat(vec![i]));
+        assert!((r.earned.unwrap() - 8.5).abs() < 1e-9);
+        assert_eq!(r.possible, Some(10.0));
     }
 
     #[test]
     fn treats_zero_point_items_as_extra_credit() {
-        let r = compute_category(&cat(vec![item(Some(9.0), 10.0), item(Some(2.0), 0.0)]));
-        assert_eq!(r.earned, 11.0);
-        assert_eq!(r.possible, 10.0);
+        let r = graded_cat(cat(vec![item(Some(9.0), 10.0), item(Some(2.0), 0.0)]));
+        assert_eq!(r.earned, Some(11.0));
+        assert_eq!(r.possible, Some(10.0));
     }
 
     #[test]
@@ -438,7 +442,7 @@ mod tests {
         b.weight = 20.0;
         let mut c = cat(vec![item(None, 100.0)]);
         c.weight = 50.0;
-        let r = compute_course(&course(Scheme::Weighted, vec![a, b, c]));
+        let r = graded(&course(Scheme::Weighted, vec![a, b, c]));
         assert_eq!(
             round(r.percent.unwrap(), 4),
             round((30.0 * 0.9 + 20.0 * 0.7) / 50.0 * 100.0, 4)
@@ -452,7 +456,7 @@ mod tests {
         let mut ec = cat(vec![item(Some(1.0), 1.0)]);
         ec.weight = 5.0;
         ec.extra_credit = true;
-        let r = compute_course(&course(Scheme::Weighted, vec![a, ec]));
+        let r = graded(&course(Scheme::Weighted, vec![a, ec]));
         assert!((r.percent.unwrap() - 85.0).abs() < 1e-9);
     }
 
