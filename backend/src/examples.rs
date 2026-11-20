@@ -5,7 +5,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::model::{Category, Course, Cutoff, Item, Scheme};
+use crate::{Category, Course, Cutoff, Item, Scheme};
 
 /// A fresh id. Server ids carry an `s` marker so they can never collide with
 /// the ids the front-end generates for items it adds itself.

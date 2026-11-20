@@ -32,7 +32,7 @@ cargo run --release        # serves ../frontend/dist and the API on http://local
 Tests:
 
 ```sh
-cd backend && cargo test   # engine unit tests, API tests, and the docs/ PDF checks
+cd backend && cargo test   # unit tests, API tests, and the docs/ PDF checks
 ```
 
 ### Server configuration
@@ -47,7 +47,7 @@ The front-end calls the API on its own origin. To point a separately hosted fron
 
 ## API
 
-All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`backend/src/model.rs`](backend/src/model.rs)). A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `counted`, `dropped`, `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
+All bodies are JSON in the same camelCase shape the front-end stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs) in `backend/src/`). A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `counted`, `dropped`, `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -79,7 +79,7 @@ GitHub Pages only hosts static files, so it can't run the Rust server. The repo 
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Each letter has a minimum %. |
 
-The engine lives in [`backend/src/engine.rs`](backend/src/engine.rs) and has no HTTP dependencies.
+Each type is graded by its own module in `backend/src/`, none of which depend on HTTP: [`item.rs`](backend/src/item.rs) scales scores, [`category.rs`](backend/src/category.rs) applies drop rules, and [`course.rs`](backend/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
 
 ## Verification against `docs/`
 

@@ -1,9 +1,8 @@
 //! Every expected value below is copied from docs/<course>/grades-11-5-2026.pdf
 //! (and rounded the same way the gradebook displays it).
 
-use grade_calculator::engine::{graded, round};
 use grade_calculator::examples::{cs401, cs411, cs440, math218, math218_canvas};
-use grade_calculator::model::Course;
+use grade_calculator::{Course, round};
 
 /// `(percent, earned, possible)` of a category, rounded to 2 places.
 fn category(r: &Course, name: &str) -> (Option<f64>, f64, f64) {
@@ -21,7 +20,7 @@ fn category(r: &Course, name: &str) -> (Option<f64>, f64, f64) {
 
 #[test]
 fn cs401_canvas_total_points() {
-    let r = graded(&cs401());
+    let r = cs401().graded();
     // Total 56.95% (106.50 / 187.00)
     assert_eq!(round(r.percent.unwrap(), 2), 56.95);
     assert_eq!(round(r.earned.unwrap(), 2), 106.5);
@@ -36,7 +35,7 @@ fn cs401_canvas_total_points() {
 
 #[test]
 fn cs411_canvas_weighted_drop_lowest_two() {
-    let r = graded(&cs411());
+    let r = cs411().graded();
     // Total 79.53%
     assert_eq!(round(r.percent.unwrap(), 2), 79.53);
 
@@ -75,7 +74,7 @@ fn cs411_canvas_weighted_drop_lowest_two() {
 
 #[test]
 fn cs440_blackboard_scaled_points() {
-    let r = graded(&cs440());
+    let r = cs440().graded();
     // Total (out of 67) 52.6
     assert_eq!(round(r.possible.unwrap(), 1), 67.0);
     assert_eq!(round(r.earned.unwrap(), 1), 52.6);
@@ -85,7 +84,7 @@ fn cs440_blackboard_scaled_points() {
 
 #[test]
 fn math218_canvas_total_points() {
-    let r = graded(&math218_canvas());
+    let r = math218_canvas().graded();
     // Total 118.28% (241.29 / 204.00)
     assert_eq!(round(r.percent.unwrap(), 2), 118.28);
     assert_eq!(round(r.earned.unwrap(), 2), 241.29);
@@ -122,12 +121,12 @@ fn math218_syllabus_weighting_reproduces_posted_midsemester_score() {
             }
         }
     }
-    assert_eq!(round(graded(&course).percent.unwrap(), 2), 65.39);
+    assert_eq!(round(course.graded().percent.unwrap(), 2), 65.39);
 }
 
 #[test]
 fn math218_syllabus_weighting_today() {
-    let r = graded(&math218());
+    let r = math218().graded();
     // MOM: drop 18.6 → 79.3/80; Written: drop 16 → 36/36; Exams: 52%.
     assert_eq!(category(&r, "MOM Homework (online)").0, Some(99.13));
     assert_eq!(category(&r, "Written Homework").0, Some(100.0));

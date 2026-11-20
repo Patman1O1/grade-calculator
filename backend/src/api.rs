@@ -19,9 +19,8 @@ use axum::routing::{get, post};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::engine::{compute_course, graded, needed_on_remaining};
 use crate::examples::{EXAMPLES, blank_course, example, re_id};
-use crate::model::{Course, Needed};
+use crate::{Course, Needed};
 
 /// Most targets accepted by one `/api/evaluate` call (each runs a 60-step search).
 pub const MAX_TARGETS: usize = 32;
@@ -139,13 +138,13 @@ pub struct EvaluateResponse {
 }
 
 pub fn evaluate_course(req: EvaluateRequest) -> EvaluateResponse {
-    let course = graded(&req.course);
+    let course = req.course.graded();
     let needs = req
         .targets
         .iter()
         .map(|&target| TargetNeed {
             target,
-            needed: needed_on_remaining(&req.course, target),
+            needed: req.course.needed_on_remaining(target),
         })
         .collect();
     EvaluateResponse {
@@ -190,7 +189,7 @@ async fn summaries(
         req.courses
             .into_iter()
             .map(|mut c| {
-                compute_course(&mut c);
+                c.grade();
                 CourseSummary {
                     id: c.id,
                     percent: c.percent,

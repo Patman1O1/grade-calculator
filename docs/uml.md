@@ -11,7 +11,7 @@ These diagrams cover the Rust server in `backend/src/` and the React front-end i
 | `«component»` | a React function component; its `useState` values appear as attributes |
 | `+` / `-` | public (`pub` / `export`) / private |
 | `?` | optional (`Option<T>` in Rust, `?` in TypeScript) |
-| `/` before a name | computed by the engine, not entered by the user (`Option<T>`, omitted from the JSON until the course is graded) |
+| `/` before a name | computed by `grade()`, not entered by the user (`Option<T>`, omitted from the JSON until the course is graded) |
 
 ## 1. Architecture
 
@@ -33,9 +33,10 @@ flowchart LR
     main["main.rs<br/>binary"]
     lib["lib.rs<br/>app()"]
     api["api.rs<br/>/api routes"]
-    engine["engine.rs"]
+    item["item.rs<br/>Item"]
+    category["category.rs<br/>Category + drop search"]
+    course["course.rs<br/>Course, Scheme, Cutoff, Needed"]
     examples["examples.rs"]
-    model["model.rs"]
     static["ServeDir<br/>frontend/dist"]
   end
 
@@ -50,16 +51,16 @@ flowchart LR
   apits -->|"HTTP JSON /api/*"| api
   main --> lib --> api
   lib --> static
-  api --> engine
+  api --> course
   api --> examples
-  engine --> model
-  examples --> model
-  api --> model
+  examples --> course
+  course -->|grades| category
+  category -->|grades| item
 ```
 
-## 2. Domain model (`backend/src/model.rs`, mirrored in `frontend/src/types.ts`)
+## 2. Domain model and grading (`backend/src/item.rs`, `category.rs`, `course.rs`; mirrored in `frontend/src/types.ts`)
 
-A `Course` owns its categories and letter scale, and each `Category` owns its items. The grade lives on the same types: the fields marked `/` are filled in by `engine::compute_course`.
+A `Course` owns its categories and letter scale, and each `Category` owns its items. Each type lives in its own module together with the logic that grades it, and the grade lives on the same types: the fields marked `/` are filled in by `grade()`. `Course::grade` grades each category, and `Category::grade` grades each item and then applies its drop rules.
 
 ```mermaid
 classDiagram
@@ -82,7 +83,12 @@ classDiagram
     +/possible?: f64
     +/percent?: f64
     +/letter?: String
-    +remaining_count() usize
+    +grade(&mut self)
+    +graded(&self) Course
+    +letter_for(&self, percent: Option~f64~) Option~String~
+    +remaining_count(&self) usize
+    +with_remaining_at(&self, fraction: f64) Course
+    +needed_on_remaining(&self, target: f64) Needed
   }
   class Category {
     <<struct>>
@@ -96,6 +102,8 @@ classDiagram
     +/earned?: f64
     +/possible?: f64
     +/percent?: f64
+    +grade(&mut self)
+    -apply_drops(&mut self)
   }
   class Item {
     <<struct>>
@@ -111,8 +119,10 @@ classDiagram
     +/dropped?: bool
     +/earned?: f64
     +/possible?: f64
-    +worth() f64
-    +is_remaining() bool
+    +worth(&self) f64
+    +is_remaining(&self) bool
+    +contribution(&self, score: f64) (f64, f64)
+    +grade(&mut self)
   }
   class Cutoff {
     <<struct>>
@@ -123,16 +133,19 @@ classDiagram
   Category "1" *-- "0..*" Item : items
   Course "1" *-- "0..*" Cutoff : scale
   Course --> "1" Scheme : scheme
+  Course ..> Needed : needed_on_remaining
 ```
 
 - `excluded`, `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false, so the JSON matches what the TypeScript-only version of the app exported.
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - Every node keeps its `id`, so the front-end matches graded values to rows by id. An evaluation that is one keystroke behind never lands on the wrong row.
+- `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
+- `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all five types at the crate root.
 
-## 3. "What do I need?" (`backend/src/model.rs`)
+## 3. "What do I need?" (`backend/src/course.rs`)
 
-`Needed` is what `engine::needed_on_remaining` returns for one target percentage.
+`Needed` is what `Course::needed_on_remaining` returns for one target percentage.
 
 ```mermaid
 classDiagram
@@ -165,23 +178,15 @@ classDiagram
   Needed <|-- Needs
 ```
 
-## 4. Grading engine (`backend/src/engine.rs`)
+## 4. Drop search (`backend/src/category.rs`, private)
 
 ```mermaid
 classDiagram
   direction LR
-  class engine {
+  class category {
     <<module>>
-    -contribution(item: &Item, score: f64)$ (f64, f64)
-    -choose_kept(candidates: &[Candidate], keep: usize, fixed_earned: f64, fixed_possible: f64, mode: Mode)$ Vec~usize~
     -drop_count(n: Option~f64~)$ usize
-    +compute_category(category: &mut Category)$ ()
-    +letter_for(percent: Option~f64~, scale: &[Cutoff])$ Option~String~
-    +compute_course(course: &mut Course)$ ()
-    +graded(course: &Course)$ Course
-    +with_remaining_at(course: &Course, fraction: f64)$ Course
-    +needed_on_remaining(course: &Course, target: f64)$ Needed
-    +round(x: f64, decimals: u32)$ f64
+    -choose_kept(candidates: &[Candidate], keep: usize, fixed_earned: f64, fixed_possible: f64, mode: Mode)$ Vec~usize~
   }
   class Candidate {
     <<struct>>
@@ -194,13 +199,16 @@ classDiagram
     Max
     Min
   }
-  engine ..> Candidate : drop search
-  engine ..> Mode : drop lowest / highest
-  engine ..> Course : grades in place
-  engine ..> Needed : returns
+  class Category {
+    <<struct>>
+    -apply_drops(&mut self)
+  }
+  Category ..> category : apply_drops
+  category ..> Candidate : drop search
+  category ..> Mode : drop lowest / highest
 ```
 
-`compute_course` and `compute_category` fill in the computed fields in place; `graded` returns a graded copy. `Candidate` and `Mode` are private. `choose_kept` runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). `needed_on_remaining` bisects on the score given to every remaining item, recomputing the course each step.
+`Category::apply_drops` collects the graded, droppable items as `Candidate`s and calls `choose_kept`, which runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). Items marked `neverDrop` are held fixed, and at least one item always stays.
 
 ## 5. Example courses (`backend/src/examples.rs`)
 
