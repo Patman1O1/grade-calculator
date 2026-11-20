@@ -1,0 +1,10 @@
+# Render Blueprint: deploys the Dockerfile as a free web service.
+# Render dashboard → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: grade-calculator
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true

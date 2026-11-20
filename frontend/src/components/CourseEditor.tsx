@@ -1,19 +1,24 @@
-import type { Course, CourseResult, Cutoff } from '../grade/types'
-import { formatNumber, formatPercent } from '../grade/engine'
-import { newId } from '../grade/courses'
+import type { CategoryResult, Course, CourseResult, Cutoff, ItemResult } from '../types'
+import { formatNumber, formatPercent, newId } from '../format'
 import { NumberInput } from './NumberInput'
 
 export type Mutate = (fn: (draft: Course) => void) => void
 
 interface Props {
   course: Course
-  result: CourseResult
+  /** Latest result from the server; null until the first one arrives. */
+  result: CourseResult | null
   mutate: Mutate
 }
+
+const PENDING = '…'
 
 export function CourseEditor({ course, result, mutate }: Props) {
   const weighted = course.scheme === 'weighted'
   const decimals = course.displayDecimals ?? 2
+  // Look results up by id: while a new result is on its way, the latest one may
+  // be a keystroke behind (e.g. missing an item that was just added).
+  const categoryResults = new Map<string, CategoryResult>(result?.categories.map((c) => [c.id, c]))
   const totalWeight = course.categories.reduce((s, c) => s + (c.extraCredit ? 0 : c.weight), 0)
 
   return (
@@ -50,7 +55,8 @@ export function CourseEditor({ course, result, mutate }: Props) {
       </section>
 
       {course.categories.map((cat, ci) => {
-        const cr = result.categories[ci]
+        const cr = categoryResults.get(cat.id)
+        const itemResults = new Map<string, ItemResult>(cr?.items.map((i) => [i.id, i]))
         const hasDrops = (cat.dropLowest ?? 0) > 0 || (cat.dropHighest ?? 0) > 0
         return (
           <section className="panel category" key={cat.id}>
@@ -62,9 +68,9 @@ export function CourseEditor({ course, result, mutate }: Props) {
                 onChange={(e) => mutate((d) => void (d.categories[ci].name = e.target.value))}
               />
               <span className="category-score">
-                {formatPercent(cr.percent, decimals)}
+                {cr ? formatPercent(cr.percent, decimals) : PENDING}
                 <small>
-                  {formatNumber(cr.earned, decimals)} / {formatNumber(cr.possible, decimals)}
+                  {cr ? `${formatNumber(cr.earned, decimals)} / ${formatNumber(cr.possible, decimals)}` : ''}
                 </small>
               </span>
               <button
@@ -135,10 +141,10 @@ export function CourseEditor({ course, result, mutate }: Props) {
               </thead>
               <tbody>
                 {cat.items.map((item, ii) => {
-                  const ir = cr.items[ii]
+                  const ir = itemResults.get(item.id)
                   const state = item.excluded
                     ? 'excluded'
-                    : ir.dropped
+                    : ir?.dropped
                       ? 'dropped'
                       : item.score === null
                         ? 'pending'
@@ -195,8 +201,10 @@ export function CourseEditor({ course, result, mutate }: Props) {
                           <span className="tag">excluded</span>
                         ) : state === 'pending' ? (
                           <span className="muted">—</span>
-                        ) : (
+                        ) : ir ? (
                           `${formatNumber(ir.earned, decimals)} / ${formatNumber(ir.possible, decimals)}`
+                        ) : (
+                          <span className="muted">{PENDING}</span>
                         )}
                       </td>
                       <td>

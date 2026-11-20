@@ -1,58 +1,62 @@
 # UML diagrams
 
-These class diagrams cover every type, interface, union and module in `src/`. The code is functional TypeScript and has no `class` declarations, so the diagrams use these conventions:
+These diagrams cover the Rust server in `backend/src/` and the React front-end in `frontend/src/`. Neither side uses classes in the object-oriented sense, so the diagrams use these conventions:
 
 | Notation | Meaning in the code |
 |---|---|
-| `«interface»` | a TypeScript `interface` |
-| `«enumeration»` | a string-literal union used as an enum (`Scheme`) |
-| `«union»` / `«variant»` | a discriminated union and its members, told apart by `kind` |
-| `«type»` | a `type` alias |
-| `«module»` | a source file; its top-level functions and constants appear as static (underlined) members |
+| `«struct»` / `«enum»` | a Rust `struct` / `enum` (field names shown as they appear in JSON, camelCase) |
+| `«variant»` | one variant of a Rust enum that serialises with a `kind` tag |
+| `«interface»` / `«type»` | a TypeScript `interface` / `type` alias |
+| `«module»` | a source file; its free functions and constants appear as static (underlined) members |
 | `«component»` | a React function component; its `useState` values appear as attributes |
-| `+` / `-` | exported / module-private |
-| `?` | optional property |
+| `+` / `-` | public (`pub` / `export`) / private |
+| `?` | optional (`Option<T>` in Rust, `?` in TypeScript) |
 
-## 1. Module overview
+## 1. Architecture
+
+The browser keeps the courses; the server does every calculation and holds no user data.
 
 ```mermaid
 flowchart LR
-  subgraph grade["src/grade"]
-    types["types.ts<br/>«data model»"]
-    engine["engine.ts<br/>«module»"]
-    courses["courses.ts<br/>«module»"]
+  subgraph browser["frontend/ (React + TypeScript)"]
+    App["App.tsx"]
+    CourseEditor["components/CourseEditor.tsx"]
+    Summary["components/Summary.tsx"]
+    NumberInput["components/NumberInput.tsx"]
+    hooks["hooks.ts<br/>useRemote"]
+    apits["api.ts"]
+    storage["storage.ts<br/>localStorage"]
+    format["format.ts"]
   end
-  subgraph components["src/components"]
-    CourseEditor["CourseEditor.tsx"]
-    Summary["Summary.tsx"]
-    NumberInput["NumberInput.tsx"]
+  subgraph server["backend/ (Rust, axum)"]
+    main["main.rs<br/>binary"]
+    lib["lib.rs<br/>app()"]
+    api["api.rs<br/>/api routes"]
+    engine["engine.rs"]
+    examples["examples.rs"]
+    model["model.rs"]
+    static["ServeDir<br/>frontend/dist"]
   end
-  subgraph tests["tests (vitest)"]
-    engineTest["engine.test.ts"]
-    coursesTest["courses.test.ts"]
-  end
-  main["main.tsx"] -->|renders| App["App.tsx"]
-  storage["storage.ts<br/>«module»"]
 
-  engine -->|imports| types
-  courses -->|imports| types
-  storage -->|imports| types
-  App -->|imports| engine
-  App -->|imports| courses
-  App -->|imports| storage
+  App --> hooks --> apits
+  App --> storage
   App -->|renders| CourseEditor
   App -->|renders| Summary
-  CourseEditor -->|imports| engine
-  CourseEditor -->|newId| courses
-  CourseEditor -->|renders| NumberInput
-  Summary -->|imports| engine
-  Summary -->|renders| NumberInput
-  engineTest -.->|tests| engine
-  coursesTest -.->|tests| engine
-  coursesTest -.->|tests| courses
+  CourseEditor --> NumberInput
+  Summary --> NumberInput
+  CourseEditor --> format
+  Summary --> format
+  apits -->|"HTTP JSON /api/*"| api
+  main --> lib --> api
+  lib --> static
+  api --> engine
+  api --> examples
+  engine --> model
+  examples --> model
+  api --> model
 ```
 
-## 2. Domain model (`src/grade/types.ts`)
+## 2. Domain model (`backend/src/model.rs`, mirrored in `frontend/src/types.ts`)
 
 A `Course` owns its categories and letter scale, and each `Category` owns its items.
 
@@ -60,45 +64,48 @@ A `Course` owns its categories and letter scale, and each `Category` owns its it
 classDiagram
   direction LR
   class Scheme {
-    <<enumeration>>
-    points
-    weighted
+    <<enum>>
+    Points = "points"
+    Weighted = "weighted"
   }
   class Course {
-    <<interface>>
-    +id: string
-    +name: string
+    <<struct>>
+    +id: String
+    +name: String
     +scheme: Scheme
-    +categories: Category[]
-    +scale: Cutoff[]
-    +displayDecimals?: number
-    +notes?: string
+    +categories: Vec~Category~
+    +scale: Vec~Cutoff~
+    +displayDecimals?: u32
+    +notes?: String
+    +remaining_count() usize
   }
   class Category {
-    <<interface>>
-    +id: string
-    +name: string
-    +weight: number
-    +dropLowest?: number
-    +dropHighest?: number
-    +extraCredit?: boolean
-    +items: Item[]
+    <<struct>>
+    +id: String
+    +name: String
+    +weight: f64
+    +dropLowest?: f64
+    +dropHighest?: f64
+    +extraCredit: bool
+    +items: Vec~Item~
   }
   class Item {
-    <<interface>>
-    +id: string
-    +name: string
-    +score: number or null
-    +outOf: number
-    +worth?: number
-    +excluded?: boolean
-    +neverDrop?: boolean
-    +note?: string
+    <<struct>>
+    +id: String
+    +name: String
+    +score?: f64
+    +outOf: f64
+    +worth?: f64
+    +excluded: bool
+    +neverDrop: bool
+    +note?: String
+    +worth() f64
+    +is_remaining() bool
   }
   class Cutoff {
-    <<interface>>
-    +letter: string
-    +min: number
+    <<struct>>
+    +letter: String
+    +min: f64
   }
   Course "1" *-- "0..*" Category : categories
   Category "1" *-- "0..*" Item : items
@@ -106,50 +113,43 @@ classDiagram
   Course --> "1" Scheme : scheme
 ```
 
-## 3. Results (`types.ts` and `engine.ts`)
+`excluded`, `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false, so the JSON matches what the TypeScript-only version of the app exported.
 
-The engine returns a result tree that mirrors the course tree. Each result node points back to the input node it was computed from. `NeededResult` is the discriminated union that `neededOnRemaining` returns.
+## 3. Results (`backend/src/model.rs`)
+
+The engine returns a result tree that mirrors the course tree. Each result node carries the `id` of the input node it was computed from; the front-end looks results up by id, so a result that is one keystroke behind never lands on the wrong row. `Needed` is what the "what do I need?" solver returns.
 
 ```mermaid
 classDiagram
   direction LR
   class CourseResult {
-    <<interface>>
-    +course: Course
-    +categories: CategoryResult[]
-    +earned: number
-    +possible: number
-    +percent: number or null
-    +letter: string or null
+    <<struct>>
+    +categories: Vec~CategoryResult~
+    +earned: f64
+    +possible: f64
+    +percent?: f64
+    +letter?: String
   }
   class CategoryResult {
-    <<interface>>
-    +category: Category
-    +items: ItemResult[]
-    +earned: number
-    +possible: number
-    +percent: number or null
+    <<struct>>
+    +id: String
+    +name: String
+    +items: Vec~ItemResult~
+    +earned: f64
+    +possible: f64
+    +percent?: f64
   }
   class ItemResult {
-    <<interface>>
-    +item: Item
-    +counted: boolean
-    +dropped: boolean
-    +earned: number
-    +possible: number
+    <<struct>>
+    +id: String
+    +counted: bool
+    +dropped: bool
+    +earned: f64
+    +possible: f64
   }
-  class Course {
-    <<interface>>
-  }
-  class Category {
-    <<interface>>
-  }
-  class Item {
-    <<interface>>
-  }
-  class NeededResult {
-    <<union>>
-    +kind: string
+  class Needed {
+    <<enum>>
+    +kind: String
   }
   class NoRemaining {
     <<variant>>
@@ -162,251 +162,245 @@ classDiagram
   class Impossible {
     <<variant>>
     +kind = "impossible"
-    +best: number or null
+    +best?: f64
   }
   class Needs {
     <<variant>>
     +kind = "needs"
-    +fraction: number
+    +fraction: f64
   }
   CourseResult "1" *-- "0..*" CategoryResult : categories
   CategoryResult "1" *-- "0..*" ItemResult : items
-  CourseResult --> "1" Course : course
-  CategoryResult --> "1" Category : category
-  ItemResult --> "1" Item : item
-  NeededResult <|-- NoRemaining
-  NeededResult <|-- Secured
-  NeededResult <|-- Impossible
-  NeededResult <|-- Needs
+  Needed <|-- NoRemaining
+  Needed <|-- Secured
+  Needed <|-- Impossible
+  Needed <|-- Needs
 ```
 
-## 4. Grading engine (`src/grade/engine.ts`)
+## 4. Grading engine (`backend/src/engine.rs`)
 
 ```mermaid
 classDiagram
   direction LR
   class engine {
     <<module>>
-    +itemWorth(item: Item)$ number
-    -contribution(item: Item, score: number)$ EarnedPossible
-    -chooseKept(candidates: Candidate[], keep: number, fixedEarned: number, fixedPossible: number, mode: max or min)$ Set~number~
-    +computeCategory(category: Category)$ CategoryResult
-    +letterFor(percent: number or null, scale: Cutoff[])$ string or null
-    +computeCourse(course: Course)$ CourseResult
-    -remainingItems(course: Course)$ Item[]
-    +withRemainingAt(course: Course, fraction: number)$ Course
-    +neededOnRemaining(course: Course, target: number)$ NeededResult
-    +round(x: number, decimals: number)$ number
-    +formatPercent(x: number or null, decimals = 2)$ string
-    +formatNumber(x: number, decimals = 2)$ string
+    -contribution(item: &Item, score: f64)$ (f64, f64)
+    -choose_kept(candidates: &[Candidate], keep: usize, fixed_earned: f64, fixed_possible: f64, mode: Mode)$ Vec~usize~
+    -drop_count(n: Option~f64~)$ usize
+    +compute_category(category: &Category)$ CategoryResult
+    +letter_for(percent: Option~f64~, scale: &[Cutoff])$ Option~String~
+    +compute_course(course: &Course)$ CourseResult
+    +with_remaining_at(course: &Course, fraction: f64)$ Course
+    +needed_on_remaining(course: &Course, target: f64)$ Needed
+    +round(x: f64, decimals: u32)$ f64
   }
   class Candidate {
-    <<interface>>
-    +index: number
-    +earned: number
-    +possible: number
+    <<struct>>
+    -index: usize
+    -earned: f64
+    -possible: f64
   }
-  class Course {
-    <<interface>>
-  }
-  class Category {
-    <<interface>>
-  }
-  class CourseResult {
-    <<interface>>
-  }
-  class CategoryResult {
-    <<interface>>
-  }
-  class NeededResult {
-    <<union>>
+  class Mode {
+    <<enum>>
+    Max
+    Min
   }
   engine ..> Candidate : drop search
+  engine ..> Mode : drop lowest / highest
   engine ..> Course : reads
-  engine ..> Category : reads
   engine ..> CourseResult : creates
-  engine ..> CategoryResult : creates
-  engine ..> NeededResult : returns
+  engine ..> Needed : returns
 ```
 
-`Candidate` is module-private. `chooseKept` works on candidates for the Canvas-exact drop-lowest/highest search. `EarnedPossible` stands for the inline return type `{ earned: number; possible: number }`.
+`Candidate` and `Mode` are private. `choose_kept` runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). `needed_on_remaining` bisects on the score given to every remaining item, recomputing the course each step.
 
-## 5. Course data and storage (`src/grade/courses.ts`, `src/storage.ts`)
+## 5. Example courses (`backend/src/examples.rs`)
 
 ```mermaid
 classDiagram
   direction LR
-  class courses {
+  class examples {
     <<module>>
-    -nextId: number$
-    +STANDARD_SCALE: Cutoff[]$
-    -MATH218_SCALE: Cutoff[]$
-    +EXAMPLES: Example[]$
-    +newId(prefix = "id")$ string
-    -item(name: string, score: number or null, outOf: number, opts: ItemOpts)$ Item
-    -category(name: string, weight: number, items: Item[], opts)$ Category
+    +EXAMPLES: [Example; 5]$
+    +new_id(prefix: &str)$ String
+    +re_id(course: Course)$ Course
+    +standard_scale()$ Vec~Cutoff~
     +cs401()$ Course
     +cs411()$ Course
     +cs440()$ Course
     +math218()$ Course
-    +math218Canvas()$ Course
-    -math218Mom()$ Item[]
-    -math218Written()$ Item[]
-    +blankCourse()$ Course
-  }
-  class ItemOpts {
-    <<type>>
-    +worth?: number
-    +excluded?: boolean
-    +neverDrop?: boolean
-    +note?: string
+    +math218_canvas()$ Course
+    +example(key: &str)$ Option~Course~
+    +blank_course()$ Course
+    -item(name, score, out_of)$ Item
+    -g(name, score, out_of)$ Item
+    -u(name, out_of)$ Item
+    -category(name, weight, items)$ Category
+    -math218_scale()$ Vec~Cutoff~
+    -math218_mom()$ Vec~Item~
+    -math218_written()$ Vec~Item~
   }
   class Example {
-    <<type>>
-    +key: string
-    +label: string
-    +build() Course
+    <<struct>>
+    +key: &str
+    +label: &str
+    +build: fn() Course
   }
-  class storage {
-    <<module>>
-    -KEY: string = "grade-calculator:v1"$
-    -isNum(x: unknown)$ boolean
-    -isItem(x: unknown)$ boolean
-    -isCategory(x: unknown)$ boolean
-    +isCourse(x: unknown)$ boolean
-    +loadState()$ SavedState or null
-    +saveState(state: SavedState)$ void
-  }
-  class SavedState {
-    <<interface>>
-    +courses: Course[]
-    +selectedId: string or null
-  }
-  class Course {
-    <<interface>>
-  }
-  class Item {
-    <<interface>>
-  }
-  class Cutoff {
-    <<interface>>
-  }
-  courses "1" *-- "5" Example : EXAMPLES
-  courses ..> ItemOpts : uses
-  courses ..> Course : builds
-  courses ..> Cutoff : defines scales
-  ItemOpts ..> Item : Partial of Pick of Item
+  examples "1" *-- "5" Example : EXAMPLES
   Example ..> Course : build()
-  storage ..> SavedState : loads and saves
-  SavedState "1" o-- "0..*" Course : courses
 ```
 
-`ItemOpts` is `Partial<Pick<Item, 'worth' | 'excluded' | 'neverDrop' | 'note'>>`. `Example` is the inline element type of `EXAMPLES`. The `is*` guards are TypeScript type predicates (`x is Course`, and so on).
+`g` builds a graded item and `u` an ungraded one; private builder methods (`with_worth`, `exclude`, `with_note`, `drop_lowest`) fill in the optional fields. Server ids contain `-s<n>` and front-end ids contain `-c<n>`, so the two never collide.
 
-## 6. UI components (`src/App.tsx`, `src/components/`)
+## 6. HTTP API (`backend/src/api.rs`)
 
-### 6a. Component tree
+```mermaid
+classDiagram
+  direction LR
+  class api {
+    <<module>>
+    +MAX_TARGETS: usize = 32$
+    +MAX_COURSES: usize = 200$
+    +router()$ Router
+    +evaluate_course(req: EvaluateRequest)$ EvaluateResponse
+    -health()$ Json
+    -list_examples()$ Json
+    -get_example(key: String)$ Json~Course~
+    -get_blank()$ Json~Course~
+    -evaluate(req: EvaluateRequest)$ Json~EvaluateResponse~
+    -summaries(req: SummariesRequest)$ Json
+    -import(data: Value)$ Json
+  }
+  class EvaluateRequest {
+    <<struct>>
+    +course: Course
+    +targets: Vec~f64~
+  }
+  class EvaluateResponse {
+    <<struct>>
+    +result: CourseResult
+    +remaining: usize
+    +needs: Vec~TargetNeed~
+  }
+  class TargetNeed {
+    <<struct>>
+    +target: f64
+    +needed: Needed
+  }
+  class SummariesRequest {
+    <<struct>>
+    +courses: Vec~Course~
+  }
+  class CourseSummary {
+    <<struct>>
+    +id: String
+    +percent?: f64
+    +letter?: String
+  }
+  class ApiError {
+    <<struct>>
+    -status: StatusCode
+    -message: String
+  }
+  api ..> EvaluateRequest
+  api ..> EvaluateResponse
+  EvaluateResponse *-- TargetNeed
+  api ..> SummariesRequest
+  api ..> CourseSummary
+  api ..> ApiError : errors
+```
+
+Each private handler serves the route of the same name in the README's API table. `lib.rs` mounts `api::router()` under `/api`, serves the built front-end for every other path (falling back to `index.html`), and adds CORS, gzip and request logging. Grading runs on `spawn_blocking` threads.
+
+### Editing a score
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Editor as CourseEditor
+  participant App as App / CourseView
+  participant Hook as useRemote
+  participant Server as Rust API
+  User->>Editor: types a score
+  Editor->>App: mutate(draft => …)
+  App->>App: new course state, saved to localStorage
+  App->>Hook: key = JSON of course + targets
+  Hook->>Hook: wait 60 ms, abort the previous request
+  Hook->>Server: POST /api/evaluate { course, targets }
+  Server-->>Hook: { result, remaining, needs }
+  Hook-->>App: data
+  App->>Editor: result (looked up by id)
+  App->>Summary: evaluation
+```
+
+## 7. Front-end (`frontend/src/`)
 
 ```mermaid
 classDiagram
   direction TB
   class App {
     <<component>>
-    -state: SavedState
-    -fileInput: Ref~HTMLInputElement~
+    -state: SavedState or null
+    -examples: ExampleInfo[]
+    -startupError: string or null
+    -summaries: Remote~CourseSummary[]~
     -mutate: Mutate
-    -initialState()$ SavedState
-    -reId(course: Course)$ Course
-    -select(id: string) void
-    -addCourse(c: Course) void
-    -removeCourse() void
-    -exportCourse() void
-    -importCourse(file: File) Promise~void~
+  }
+  class CourseView {
+    <<component>>
+    -custom: number or null
+    -evaluation: Remote~Evaluation~
   }
   class CourseEditor {
     <<component>>
+    +course: Course
+    +result: CourseResult or null
+    +mutate: Mutate
   }
   class ScaleEditor {
     <<component>>
   }
   class Summary {
     <<component>>
-    -custom: number or null
-    -describeNeed(course: Course, target: number)$ string
+    +course: Course
+    +evaluation: Evaluation or null
+    +custom: number or null
+    +onCustom(value) void
   }
   class NumberInput {
     <<component>>
     -text: string
     -prev: number or null
-    -parse(s: string)$ number or null
   }
-  App *-- "1" CourseEditor : renders
-  App *-- "1" Summary : renders
-  CourseEditor *-- "1" ScaleEditor : renders
-  CourseEditor *-- "0..*" NumberInput : renders
-  ScaleEditor *-- "0..*" NumberInput : renders
-  Summary *-- "1" NumberInput : custom target
+  class ServerBanner {
+    <<component>>
+    +message: string
+  }
+  class api {
+    <<module>>
+    +examples()$ Promise
+    +example(key)$ Promise
+    +blank()$ Promise
+    +evaluate(course, targets, signal)$ Promise
+    +summaries(courses, signal)$ Promise
+    +import(data)$ Promise
+  }
+  class hooks {
+    <<module>>
+    +useRemote(key, fetcher, delay)$ Remote
+  }
+  App *-- "0..1" CourseView : selected course
+  App *-- "0..1" ServerBanner
+  CourseView *-- CourseEditor
+  CourseView *-- Summary
+  CourseView *-- "0..1" ServerBanner
+  CourseEditor *-- ScaleEditor
+  CourseEditor *-- "0..*" NumberInput
+  ScaleEditor *-- "0..*" NumberInput
+  Summary *-- NumberInput : custom target
+  App ..> api
+  App ..> hooks
+  CourseView ..> hooks
 ```
 
-`App` keeps the `SavedState` in `useState`. `initialState`, `reId`, `describeNeed` and `parse` are module-level helpers in their component's file, so they are drawn as static members.
-
-### 6b. Props and the `Mutate` callback
-
-```mermaid
-classDiagram
-  direction LR
-  class App {
-    <<component>>
-  }
-  class CourseEditor {
-    <<component>>
-  }
-  class ScaleEditor {
-    <<component>>
-  }
-  class Summary {
-    <<component>>
-  }
-  class NumberInput {
-    <<component>>
-  }
-  class CourseEditorProps {
-    <<interface>>
-    +course: Course
-    +result: CourseResult
-    +mutate: Mutate
-  }
-  class ScaleEditorProps {
-    <<type>>
-    +course: Course
-    +mutate: Mutate
-  }
-  class SummaryProps {
-    <<interface>>
-    +course: Course
-    +result: CourseResult
-  }
-  class NumberInputProps {
-    <<interface>>
-    +value: number or null
-    +nullable?: boolean
-    +placeholder?: string
-    +min?: number
-    +className?: string
-    +aria-label?: string
-    +onChange(value: number or null) void
-  }
-  class Mutate {
-    <<type>>
-    +call(fn: Course to void) void
-  }
-  CourseEditor ..> CourseEditorProps : props
-  ScaleEditor ..> ScaleEditorProps : props
-  Summary ..> SummaryProps : props
-  NumberInput ..> NumberInputProps : props
-  CourseEditorProps --> Mutate : mutate
-  ScaleEditorProps --> Mutate : mutate
-  App ..> Mutate : provides
-```
-
-In the source, all three props interfaces are module-private and named `Props`. They are renamed here to tell them apart. `ScaleEditor` (private to `CourseEditor.tsx`) takes an inline props type. `Mutate` is `(fn: (draft: Course) => void) => void`: App clones the selected course, lets `fn` edit the draft, and stores the result.
+`CourseView` is keyed by course id, so switching courses starts with a fresh evaluation. `Mutate` is `(fn: (draft: Course) => void) => void`: `App` clones the selected course, lets `fn` edit the draft, and stores the result. `useRemote` keeps the last good response while a newer one is in flight, so numbers don't flicker while typing.

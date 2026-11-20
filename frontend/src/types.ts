@@ -1,29 +1,17 @@
 /**
- * Data model for a course gradebook.
- *
- * The model is deliberately small but general enough to express the grading
- * policies used by Canvas, Blackboard and typical syllabi:
+ * Data model for a course gradebook, and the shapes the Rust API returns.
+ * These mirror backend/src/model.rs and backend/src/api.rs (camelCase JSON);
+ * keep the two in sync.
  *
  *  - An Item is one graded thing (a quiz, an exam, a lab). Its raw result is
  *    `score / outOf`. `worth` says how much the item counts inside its category
- *    (defaults to `outOf`, i.e. plain points). Blackboard-style "this 0–100 report
- *    is worth 10 course points" is expressed as `outOf: 100, worth: 10`; a syllabus
- *    rule like "each exam counts equally" is expressed by giving the items equal
- *    worth regardless of their raw point totals.
+ *    (defaults to `outOf`, i.e. plain points).
  *  - A Category groups items, may drop the lowest/highest results, and carries a
  *    weight when the course is weighted.
  *  - A Course combines categories either by total points or by weights.
  */
 
-export type Scheme =
-  /** Sum of points earned / sum of points possible across all categories. */
-  | 'points'
-  /**
-   * Each category's percentage multiplied by its weight. Categories with no
-   * graded work are left out and the remaining weights are renormalised
-   * (this is what Canvas and most syllabi do mid-semester).
-   */
-  | 'weighted'
+export type Scheme = 'points' | 'weighted'
 
 export interface Item {
   id: string
@@ -49,10 +37,7 @@ export interface Category {
   weight: number
   dropLowest?: number
   dropHighest?: number
-  /**
-   * Weighted scheme only: the category's weighted score is added on top of the
-   * grade, but its weight is not part of the denominator.
-   */
+  /** Weighted scheme only: adds to the grade without adding to the denominator. */
   extraCredit?: boolean
   items: Item[]
 }
@@ -75,8 +60,12 @@ export interface Course {
   notes?: string
 }
 
+// ---------------------------------------------------------------------------
+// API results
+// ---------------------------------------------------------------------------
+
 export interface ItemResult {
-  item: Item
+  id: string
   /** Item is graded, not excluded and not dropped. */
   counted: boolean
   dropped: boolean
@@ -86,7 +75,8 @@ export interface ItemResult {
 }
 
 export interface CategoryResult {
-  category: Category
+  id: string
+  name: string
   items: ItemResult[]
   earned: number
   possible: number
@@ -95,7 +85,6 @@ export interface CategoryResult {
 }
 
 export interface CourseResult {
-  course: Course
   categories: CategoryResult[]
   /** Points scheme: totals across categories. Weighted scheme: weighted points. */
   earned: number
@@ -103,4 +92,29 @@ export interface CourseResult {
   /** Overall percentage, or null when nothing is graded. */
   percent: number | null
   letter: string | null
+}
+
+export type Needed =
+  | { kind: 'no-remaining' }
+  | { kind: 'secured' }
+  | { kind: 'impossible'; best: number | null }
+  | { kind: 'needs'; fraction: number }
+
+export interface Evaluation {
+  result: CourseResult
+  /** Ungraded items that still have points available. */
+  remaining: number
+  /** One entry per requested target, in request order. */
+  needs: { target: number; needed: Needed }[]
+}
+
+export interface CourseSummary {
+  id: string
+  percent: number | null
+  letter: string | null
+}
+
+export interface ExampleInfo {
+  key: string
+  label: string
 }
