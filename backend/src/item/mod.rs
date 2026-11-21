@@ -22,7 +22,7 @@ pub enum Status {
 ///
 /// Its points are what it contributes to its category, so they also set how
 /// much it counts there: a 10-point quiz counts a tenth as much as a 100-point
-/// exam. A score entered as a percentage is stored as `percent / 100`.
+/// exam.
 ///
 /// Deserialising also accepts the older `score` / `outOf` / `worth` form and
 /// converts it (see `RawItem`), so saved courses and old exports still load.
