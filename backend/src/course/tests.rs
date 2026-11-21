@@ -1,7 +1,6 @@
 //! Unit tests for [`super`] (`course/mod.rs`).
 
 use super::*;
-use crate::examples::standard_scale;
 use crate::item::Item;
 use crate::round;
 

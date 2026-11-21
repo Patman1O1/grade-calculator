@@ -4,8 +4,8 @@ A course grade calculator that handles the grading schemes used by Canvas, Black
 
 It runs entirely in your browser and has two parts:
 
-- **`backend/`**: the grading engine, in Rust. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver), the example courses, and import validation. It is compiled to WebAssembly with [wasm-bindgen](https://crates.io/crates/wasm-bindgen).
-- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI and calls the engine directly, so every edit is graded instantly with no server. Courses are saved in your browser (localStorage) and can be exported or imported as JSON. The app starts with no courses; create one with **New**, or load one of the examples below from **Add example…**.
+- **`backend/`**: the grading engine, in Rust. It owns all of the grade math (drop rules, weighting, letters, the "what do I need?" solver) and import validation. It is compiled to WebAssembly with [wasm-bindgen](https://crates.io/crates/wasm-bindgen).
+- **`frontend/`**: a React + TypeScript app (Vite). It is the editor UI and calls the engine directly, so every edit is graded instantly with no server. Courses are saved in your browser (localStorage) and can be exported or imported as JSON. The app starts with no courses; create one with **New** or **Import** one.
 
 ## Running locally
 
@@ -39,8 +39,6 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 
 | Function | Returns |
 |---|---|
-| `examples()` | `[{ key, label }]` |
-| `example(key)` | a `Course` with fresh ids |
 | `blankCourse()` | a starter `Course` |
 | `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
 | `summaries(courses)` | `[{ id, percent, letter }]` |
@@ -72,7 +70,7 @@ Each type is graded by its own module in `backend/src/`, none of which depend on
 
 ## Verification against `docs/`
 
-[`backend/src/examples.rs`](backend/src/examples.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. [`backend/tests/courses.rs`](backend/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
+[`backend/tests/fixtures/mod.rs`](backend/tests/fixtures/mod.rs) has the four courses in `docs/`, transcribed from each `grades-11-5-2026.pdf` and configured from each `syllabus.pdf`. They are test data only, not part of the app. [`backend/tests/courses.rs`](backend/tests/courses.rs) checks that the calculator reproduces every total and group row printed in those PDFs:
 
 | Course | Gradebook | PDF shows | Calculator |
 |---|---|---|---|

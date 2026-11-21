@@ -6,6 +6,8 @@ use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 
 use crate::category::Category;
+use crate::ids::new_id;
+use crate::item::Item;
 
 /// How a course combines its categories.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,7 +74,67 @@ pub struct Course {
     pub letter: Option<String>,
 }
 
+/// The usual 90/80/70/60 letter scale.
+pub fn standard_scale() -> Vec<Cutoff> {
+    [
+        ("A", 90.0),
+        ("B", 80.0),
+        ("C", 70.0),
+        ("D", 60.0),
+        ("F", 0.0),
+    ]
+    .into_iter()
+    .map(|(letter, min)| Cutoff {
+        letter: letter.to_owned(),
+        min,
+    })
+    .collect()
+}
+
 impl Course {
+    /// Starting point for a new course: weighted, a Homework and an Exams
+    /// category with one ungraded item each, and the standard letter scale.
+    pub fn blank() -> Course {
+        let category = |name: &str, weight: f64, item: &str, possible: f64| Category {
+            id: new_id("cat"),
+            name: name.to_owned(),
+            weight,
+            items: vec![Item {
+                id: new_id("item"),
+                name: item.to_owned(),
+                earned: None,
+                possible,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        Course {
+            id: new_id("course"),
+            name: "New course".to_owned(),
+            scheme: Scheme::Weighted,
+            categories: vec![
+                category("Homework", 40.0, "Homework 1", 10.0),
+                category("Exams", 60.0, "Midterm", 100.0),
+            ],
+            scale: standard_scale(),
+            display_decimals: Some(2),
+            ..Default::default()
+        }
+    }
+
+    /// The same course with fresh ids for it and everything in it, so a copy
+    /// (an import or a duplicate) never collides with the original.
+    pub fn with_fresh_ids(mut self) -> Course {
+        self.id = new_id("course");
+        for c in &mut self.categories {
+            c.id = new_id("cat");
+            for i in &mut c.items {
+                i.id = new_id("item");
+            }
+        }
+        self
+    }
+
     /// Grade the course in place: grades every category (and item), then fills
     /// in the course's `earned`, `possible`, `percent` and `letter`.
     pub fn grade(&mut self) {
