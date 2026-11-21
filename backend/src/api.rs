@@ -90,18 +90,28 @@ pub const NOT_A_COURSE: &str = "That file is not a course exported from this cal
 /// aren't courses are skipped; it is an error if none are. Also used to
 /// duplicate a course.
 pub fn import_courses(data: Value) -> Result<Vec<Course>, &'static str> {
-    let list = match data {
-        Value::Array(list) => list,
-        other => vec![other],
-    };
-    let courses: Vec<Course> = list
-        .into_iter()
-        .filter_map(|v| serde_json::from_value::<Course>(v).ok())
-        .map(re_id)
-        .collect();
+    let courses: Vec<Course> = parse_courses(data).into_iter().map(re_id).collect();
     if courses.is_empty() {
         Err(NOT_A_COURSE)
     } else {
         Ok(courses)
     }
+}
+
+/// Bring courses saved by an earlier version of the app up to the current
+/// format (e.g. items stored as `score` / `outOf` / `worth`), keeping their
+/// ids. Entries that aren't courses are dropped.
+pub fn normalize_courses(data: Value) -> Vec<Course> {
+    parse_courses(data)
+}
+
+/// The courses in `data` (one course or a list), skipping anything that isn't one.
+fn parse_courses(data: Value) -> Vec<Course> {
+    let list = match data {
+        Value::Array(list) => list,
+        other => vec![other],
+    };
+    list.into_iter()
+        .filter_map(|v| serde_json::from_value::<Course>(v).ok())
+        .collect()
 }

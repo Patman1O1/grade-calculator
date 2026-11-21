@@ -44,9 +44,12 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 | `blankCourse()` | a starter `Course` |
 | `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
 | `summaries(courses)` | `[{ id, percent, letter }]` |
+| `normalizeCourses(courses)` | saved courses converted to the current format, with their ids kept |
 | `importCourses(data)` | the courses in `data` (one or a list), validated, with fresh ids |
 
-A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`), `earned` and `possible` on each item. They are left out of ungraded courses and ignored on input.
+A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`) on each item. They are left out of ungraded courses and ignored on input.
+
+`normalizeCourses(courses)` converts courses saved by an earlier version of the app (items stored as `score` / `outOf` / `worth`) to the current format, keeping their ids; the app runs saved courses through it on startup. `importCourses` accepts that older format too.
 
 ## Deploying
 
@@ -56,8 +59,9 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 
 | Concept | Meaning |
 |---|---|
-| **Item** | `score / outOf`. A blank score means the item is not graded yet and is ignored. `outOf = 0` makes the item pure extra credit. |
-| **Worth** | How much an item counts inside its category. It defaults to `outOf` (plain points). Set it to rescale an item, for example a report scored 0–100 that is worth 10 course points, or exams with different point totals that each count equally. |
+| **Item** | `earned` out of `possible` points. A blank `earned` means the item is not graded yet and is ignored. `possible = 0` makes the item pure extra credit. |
+| **Grade entry** | Each item's **Grade** has a dropdown: **Score (%)** takes one percentage and stores it as that many points out of 100; **Points** takes earned / possible directly. An item opens as Score (%) when it is out of 100, and as Points otherwise. |
+| **Points set weight** | Within a category, items count in proportion to their points possible: a 10-point quiz counts a tenth as much as a 100-point exam. So a score entered in % counts as 100 points. To make a 0–100 report count 10 points, enter it as Points (85/100 → 8.5 / 10). |
 | **Excluded** | The item is shown but does not count (for example Canvas "does not count toward final grade" items, or sub-scores). |
 | **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. Items marked *Keep* are never dropped. |
 | **Total points** | Course % = sum of earned / sum of possible over all categories. |
@@ -74,7 +78,7 @@ Each type is graded by its own module in `backend/src/`, none of which depend on
 |---|---|---|---|
 | CS 401 | Canvas, total points; Late Days excluded | 56.95% (106.50 / 187.00) | 56.95% (106.50 / 187.00) |
 | CS 411 | Canvas, weighted 18/24/24/24 (+ Final 10, EC 0); drop 2 lowest quizzes and labs | 79.53% | 79.53% |
-| CS 440 | Blackboard, each item scaled to its syllabus point value | Total 52.6 of 67, PPP 78.4 | 52.6 of 67, 78.4 |
+| CS 440 | Blackboard, each item entered as its syllabus point value | Total 52.6 of 67, PPP 78.4 | 52.6 of 67, 78.4 |
 | Math 218 | Canvas, total points with a 65.39/0 "Midsemester Score" | 118.28% (241.29 / 204.00) | 118.28% (241.29 / 204.00) |
 
 Math 218 also includes a syllabus-weighted version (online HW 15%, written HW 15%, exams 70% split 20/20/30, lowest homework of each type dropped). It reproduces the instructor's posted **Midsemester Score of 65.39** from the work graded at that point. That confirms the method: missing exams are projected at your exam average. Canvas's 118.28% is an artifact of how its gradebook is configured, not a real course grade, so the app includes both versions.

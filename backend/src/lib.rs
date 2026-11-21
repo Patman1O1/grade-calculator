@@ -4,9 +4,8 @@
 //! used by Canvas, Blackboard and typical syllabi. Each type lives in its own
 //! module together with the logic that grades it:
 //!
-//! - [`item`]: an [`Item`] is one graded thing. Its raw result is
-//!   `score / out_of`; `worth` says how much it counts inside its category,
-//!   and its [`Status`] says whether it counts and, if not, why not.
+//! - [`item`]: an [`Item`] is one graded thing, `earned` out of `possible`
+//!   points; its [`Status`] says whether it counts and, if not, why not.
 //! - [`category`]: a [`Category`] groups items, may drop the lowest/highest
 //!   results (the Canvas-exact drop search lives here), and carries a weight.
 //! - [`course`]: a [`Course`] combines categories by total points or by weights
@@ -20,7 +19,7 @@
 //! and that older JSON exports of the TypeScript app used, so those still import.
 //!
 //! The grade lives on the same types: [`Course::grade`] fills in each item's
-//! `status`/`earned`/`possible`, each category's
+//! `status`, each category's
 //! `earned`/`possible`/`percent`, and the course's `earned`/`possible`/`percent`/
 //! `letter`. These computed fields are `None` (and left out of the JSON) until
 //! the course is graded, and they are ignored when a course is deserialised, so

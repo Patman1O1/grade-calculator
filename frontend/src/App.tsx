@@ -34,9 +34,19 @@ function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
   )
 }
 
-/** Saved courses, or none on a first visit (examples are under "Add example…"). */
+/**
+ * Saved courses, or none on a first visit (examples are under "Add example…").
+ * Saved courses go through the engine so ones from older versions of the app
+ * (items stored as score / outOf / worth) load in the current format.
+ */
 function initialState(): SavedState {
-  return loadState() ?? { courses: [], selectedId: null }
+  const saved = loadState()
+  if (!saved) return { courses: [], selectedId: null }
+  const courses = engine.normalizeCourses(saved.courses)
+  if (courses.length < saved.courses.length) {
+    console.warn(`Skipped ${saved.courses.length - courses.length} saved course(s) that could not be read.`)
+  }
+  return { courses, selectedId: saved.selectedId }
 }
 
 export default function App() {

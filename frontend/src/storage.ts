@@ -3,6 +3,7 @@ import type { Course } from './course'
 const KEY = 'grade-calculator:v1'
 
 export interface SavedState {
+  /** As saved; may be in an older format until `engine.normalizeCourses` converts it. */
   courses: Course[]
   selectedId: string | null
 }

@@ -36,6 +36,8 @@ export const engine = {
   /** Grade a course and solve "what do I need?" for each target percentage. */
   evaluate: (course: Course, targets: number[]): Evaluation => wasm.evaluate(course, targets),
   summaries: (courses: Course[]): CourseSummary[] => wasm.summaries(courses),
+  /** Convert courses saved by an earlier version of the app to the current format, keeping their ids. */
+  normalizeCourses: (courses: unknown[]): Course[] => wasm.normalizeCourses(courses),
   /** Validate parsed JSON (one course or a list) and get copies with fresh ids. Throws if it has no course. */
   importCourses: (data: unknown): Course[] => wasm.importCourses(data),
 }

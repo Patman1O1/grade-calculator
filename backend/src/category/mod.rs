@@ -45,13 +45,14 @@ impl Category {
         self.items.iter_mut().for_each(Item::grade);
         self.apply_drops();
 
-        let (earned, possible) = self
-            .items
-            .iter()
-            .filter(|i| i.is_counted())
-            .fold((0.0, 0.0), |(e, p), i| {
-                (e + i.earned.unwrap_or(0.0), p + i.possible.unwrap_or(0.0))
-            });
+        let (earned, possible) =
+            self.items
+                .iter()
+                .filter(|i| i.is_counted())
+                .fold((0.0, 0.0), |(e, p), i| {
+                    let (earned, possible) = i.points();
+                    (e + earned, p + possible)
+                });
         self.earned = Some(earned);
         self.possible = Some(possible);
         self.percent = (possible > 0.0).then(|| earned / possible * 100.0);
@@ -71,7 +72,7 @@ impl Category {
             if !item.is_counted() {
                 continue;
             }
-            let (earned, possible) = (item.earned.unwrap_or(0.0), item.possible.unwrap_or(0.0));
+            let (earned, possible) = item.points();
             if item.never_drop {
                 fixed_earned += earned;
                 fixed_possible += possible;
