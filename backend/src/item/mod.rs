@@ -18,83 +18,123 @@ pub enum Status {
     Ungraded,
 }
 
-/// One graded thing. Its raw result is `score / out_of`; `worth` says how much
-/// it counts inside its category (defaults to `out_of`, i.e. plain points).
+/// One graded thing, as `earned` out of `possible` points.
 ///
-/// Blackboard-style "this 0–100 report is worth 10 course points" is
-/// `out_of: 100, worth: 10`. A syllabus rule like "each exam counts equally"
-/// gives the items equal worth regardless of their raw point totals.
+/// Its points are what it contributes to its category, so they also set how
+/// much it counts there: a 10-point quiz counts a tenth as much as a 100-point
+/// exam. A score entered as a percentage is stored as `percent / 100`.
+///
+/// Deserialising also accepts the older `score` / `outOf` / `worth` form and
+/// converts it (see `RawItem`), so saved courses and old exports still load.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", try_from = "RawItem")]
 pub struct Item {
-    #[serde(default)]
     pub id: String,
     pub name: String,
-    /// Raw score, or `None` when the item has not been graded yet.
-    pub score: Option<f64>,
-    /// Raw points possible. 0 makes the item pure extra credit.
-    pub out_of: f64,
-    /// How much the item counts inside its category. Defaults to `out_of`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub worth: Option<f64>,
+    /// Points earned, or `None` when the item has not been graded yet.
+    pub earned: Option<f64>,
+    /// Points possible. 0 makes the item pure extra credit: its `earned`
+    /// points are added on top of the category.
+    pub possible: f64,
     /// Not counted toward the grade at all (Canvas "does not count toward final grade").
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(skip_serializing_if = "is_false")]
     pub excluded: bool,
     /// Never removed by drop-lowest / drop-highest rules.
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(skip_serializing_if = "is_false")]
     pub never_drop: bool,
     /// Free-form note shown in the UI (e.g. due date).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 
-    // Computed when the item's category is graded (see the crate docs).
-    /// Whether the item counts toward its category's grade, and if not, why not.
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    /// Computed when the item's category is graded (see the crate docs):
+    /// whether the item counts toward its category's grade, and if not, why not.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
-    /// Contribution to the category: score / outOf * worth (raw score for
-    /// extra credit). 0 unless the status is `Counted` or `Dropped`.
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub earned: Option<f64>,
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub possible: Option<f64>,
+}
+
+/// What an item looks like in JSON: the current `earned` / `possible` form,
+/// or the older `score` / `outOf` / `worth` form. A computed `status` in the
+/// input is ignored.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawItem {
+    #[serde(default)]
+    id: String,
+    name: String,
+    #[serde(default)]
+    earned: Option<f64>,
+    #[serde(default)]
+    possible: Option<f64>,
+    /// Older form: raw score out of `outOf`, optionally rescaled to `worth`.
+    #[serde(default)]
+    score: Option<f64>,
+    #[serde(default)]
+    out_of: Option<f64>,
+    #[serde(default)]
+    worth: Option<f64>,
+    #[serde(default)]
+    excluded: bool,
+    #[serde(default)]
+    never_drop: bool,
+    #[serde(default)]
+    note: Option<String>,
+}
+
+impl TryFrom<RawItem> for Item {
+    type Error = String;
+
+    fn try_from(raw: RawItem) -> Result<Self, Self::Error> {
+        let (earned, possible) = match (raw.out_of, raw.possible) {
+            // Older form. Converts exactly as the old engine scored it:
+            // score / outOf * worth, out of worth (raw score for extra credit).
+            (Some(out_of), _) => {
+                let worth = raw.worth.unwrap_or(out_of);
+                if out_of > 0.0 {
+                    (raw.score.map(|s| s / out_of * worth), worth)
+                } else {
+                    (raw.score, 0.0)
+                }
+            }
+            (None, Some(possible)) => (raw.earned, possible),
+            (None, None) => return Err(format!("item {:?} has no points possible", raw.name)),
+        };
+        Ok(Item {
+            id: raw.id,
+            name: raw.name,
+            earned,
+            possible,
+            excluded: raw.excluded,
+            never_drop: raw.never_drop,
+            note: raw.note,
+            status: None,
+        })
+    }
 }
 
 impl Item {
-    /// Effective worth of the item inside its category.
-    pub fn worth(&self) -> f64 {
-        self.worth.unwrap_or(self.out_of)
-    }
-
     /// Ungraded, not excluded, and still has points available.
     pub fn is_remaining(&self) -> bool {
-        self.score.is_none() && !self.excluded && self.out_of > 0.0
+        self.earned.is_none() && !self.excluded && self.possible > 0.0
     }
 
-    /// Points the item contributes to its category for a given score:
-    /// `(earned, possible)`.
-    pub fn contribution(&self, score: f64) -> (f64, f64) {
-        let worth = self.worth();
-        if self.out_of > 0.0 {
-            (score / self.out_of * worth, worth)
-        } else {
-            // Zero-point items are pure extra credit: the raw score is added on top.
-            (score, 0.0)
-        }
+    /// `earned / possible` as a percentage; `None` if ungraded or extra credit.
+    pub fn percent(&self) -> Option<f64> {
+        let earned = self.earned?;
+        (self.possible > 0.0).then(|| earned / self.possible * 100.0)
     }
 
-    /// Grade the item on its own, before any drop rule: fills in `status`
-    /// (`Counted`, `Excluded` or `Ungraded`), `earned` and `possible`.
-    /// [`crate::Category::grade`] calls this for every item and then applies
-    /// its drop rules, which can change `Counted` to `Dropped`.
+    /// Grade the item on its own, before any drop rule: sets `status` to
+    /// `Counted`, `Excluded` or `Ungraded`. [`crate::Category::grade`] calls
+    /// this for every item and then applies its drop rules, which can change
+    /// `Counted` to `Dropped`.
     pub fn grade(&mut self) {
-        let (status, (earned, possible)) = match self.score {
-            _ if self.excluded => (Status::Excluded, (0.0, 0.0)),
-            None => (Status::Ungraded, (0.0, 0.0)),
-            Some(score) => (Status::Counted, self.contribution(score)),
-        };
-        self.status = Some(status);
-        self.earned = Some(earned);
-        self.possible = Some(possible);
+        self.status = Some(if self.excluded {
+            Status::Excluded
+        } else if self.earned.is_none() {
+            Status::Ungraded
+        } else {
+            Status::Counted
+        });
     }
 
     /// Part of its category's grade (as of the last `grade`).
@@ -102,8 +142,12 @@ impl Item {
         self.status == Some(Status::Counted)
     }
 
-    /// Mark a counted item as removed by a drop rule. It keeps its `earned`
-    /// and `possible`, so the UI can still show what the dropped score was.
+    /// `(earned, possible)` this item adds to its category when counted.
+    pub(crate) fn points(&self) -> (f64, f64) {
+        (self.earned.unwrap_or(0.0), self.possible)
+    }
+
+    /// Mark a counted item as removed by a drop rule.
     pub(crate) fn drop_from_grade(&mut self) {
         self.status = Some(Status::Dropped);
     }

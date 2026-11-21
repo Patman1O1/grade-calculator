@@ -145,7 +145,7 @@ impl Course {
         let mut c = self.clone();
         for item in c.categories.iter_mut().flat_map(|c| c.items.iter_mut()) {
             if item.is_remaining() {
-                item.score = Some(item.out_of * fraction);
+                item.earned = Some(item.possible * fraction);
             }
         }
         c

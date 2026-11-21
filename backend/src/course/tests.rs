@@ -5,10 +5,10 @@ use crate::examples::standard_scale;
 use crate::item::Item;
 use crate::round;
 
-fn item(score: Option<f64>, out_of: f64) -> Item {
+fn item(earned: Option<f64>, possible: f64) -> Item {
     Item {
-        score,
-        out_of,
+        earned,
+        possible,
         ..Default::default()
     }
 }

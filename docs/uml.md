@@ -24,6 +24,7 @@ flowchart LR
     App["App.tsx"]
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
+    GradeInput["components/GradeInput.tsx"]
     NumberInput["components/NumberInput.tsx"]
     coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, CourseSummary, Mutate"]
     categoryts["category.ts<br/>Category"]
@@ -47,6 +48,7 @@ flowchart LR
   App --> storage
   App -->|renders| CourseEditor
   App -->|renders| Summary
+  CourseEditor --> GradeInput --> NumberInput
   CourseEditor --> NumberInput
   Summary --> NumberInput
   CourseEditor --> format
@@ -118,19 +120,16 @@ classDiagram
     <<struct>>
     +id: String
     +name: String
-    +score?: f64
-    +outOf: f64
-    +worth?: f64
+    +earned?: f64
+    +possible: f64
     +excluded: bool
     +neverDrop: bool
     +note?: String
     +/status?: Status
-    +/earned?: f64
-    +/possible?: f64
-    +worth(&self) f64
     +is_remaining(&self) bool
-    +contribution(&self, score: f64) (f64, f64)
+    +percent(&self) Option~f64~
     +grade(&mut self)
+    ~points(&self) (f64, f64)
   }
   class Cutoff {
     <<struct>>
@@ -156,7 +155,8 @@ classDiagram
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - Every node keeps its `id`, so the front-end matches graded values to rows by id. An evaluation that is one keystroke behind never lands on the wrong row.
-- `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`.
+- An item is `earned` out of `possible` points; those points are also how much it counts in its category. Deserialising goes through a private `RawItem` (`#[serde(try_from)]`) that also accepts the older `score` / `outOf` / `worth` form and converts it as the old engine scored it (`score / outOf × worth` out of `worth`), so saved courses and old exports still load.
+- `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - Each of `item/`, `category/` and `course/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all six types at the crate root.
@@ -264,7 +264,7 @@ classDiagram
   Example ..> Course : build()
 ```
 
-`g` builds a graded item and `u` an ungraded one; private builder methods (`with_worth`, `exclude`, `with_note`, `drop_lowest`) fill in the optional fields. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
+`g` builds a graded item and `u` an ungraded one; private builder methods fill in the rest: `with_worth` rescales an item to its syllabus point value (85/100 worth 10 becomes 8.5/10), and `exclude`, `with_note` and `drop_lowest` set the optional fields. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
 
 ## 6. Engine interface (`backend/src/api.rs`, `backend/src/wasm.rs`)
 
@@ -280,6 +280,7 @@ classDiagram
     +blankCourse()$ Course
     +evaluate(course: JsValue, targets: JsValue)$ Evaluation
     +summaries(courses: JsValue)$ CourseSummary[]
+    +normalizeCourses(courses: JsValue)$ Course[]
     +importCourses(data: JsValue)$ Course[]
     -to_js(value)$ JsValue
     -from_js(value, what)$ T
@@ -291,6 +292,7 @@ classDiagram
     +evaluate(course: &Course, targets: &[f64])$ Evaluation
     +summaries(courses: Vec~Course~)$ Vec~CourseSummary~
     +import_courses(data: Value)$ Result~Vec~Course~, &str~
+    +normalize_courses(data: Value)$ Vec~Course~
   }
   class Evaluation {
     <<struct>>
@@ -376,6 +378,14 @@ classDiagram
     +custom: number or null
     +onCustom(value) void
   }
+  class GradeInput {
+    <<component>>
+    +item: Item
+    +onPercent(percent) void
+    +onPoints(earned, possible) void
+    +onSwitchToPercent() void
+    -mode: GradeMode
+  }
   class NumberInput {
     <<component>>
     -text: string
@@ -389,12 +399,15 @@ classDiagram
     +blankCourse()$ Course
     +evaluate(course, targets)$ Evaluation
     +summaries(courses)$ CourseSummary[]
+    +normalizeCourses(courses)$ Course[]
     +importCourses(data)$ Course[]
   }
   App *-- "0..1" CourseView : selected course
   CourseView *-- CourseEditor
   CourseView *-- Summary
   CourseEditor *-- ScaleEditor
+  CourseEditor *-- "0..*" GradeInput : Grade column
+  GradeInput *-- "1..2" NumberInput
   CourseEditor *-- "0..*" NumberInput
   ScaleEditor *-- "0..*" NumberInput
   Summary *-- NumberInput : custom target
@@ -440,8 +453,12 @@ classDiagram
     +Item, Status
     -ROW_CLASS: Record~Status, string~$
     +rowClass(status)$ string
+    +GradeMode
+    +defaultGradeMode(item)$ GradeMode
+    +percentOf(item)$ number or null
+    +setPercent(item, percent)$ void
+    +toPercent(item)$ void
     +newItem(name, previous)$ Item
-    +setWorth(item, worth)$ void
   }
   course ..> category : Category
   category ..> item : Item, newItem

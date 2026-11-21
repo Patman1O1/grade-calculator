@@ -43,13 +43,13 @@ pub fn re_id(mut course: Course) -> Course {
     course
 }
 
+/// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
     Item {
         id: new_id("item"),
         name: name.to_owned(),
-        score,
-        out_of,
-        worth: None,
+        earned: score,
+        possible: out_of,
         ..Default::default()
     }
 }
@@ -65,8 +65,13 @@ fn u(name: &str, out_of: f64) -> Item {
 }
 
 impl Item {
+    /// Rescale the item to count `worth` points (a 0–100 report worth 10
+    /// points: 85/100 becomes 8.5/10), as the syllabus weights it.
     fn with_worth(mut self, worth: f64) -> Self {
-        self.worth = Some(worth);
+        if self.possible > 0.0 {
+            self.earned = self.earned.map(|e| e / self.possible * worth);
+            self.possible = worth;
+        }
         self
     }
     fn exclude(mut self) -> Self {
@@ -227,7 +232,7 @@ pub fn cs411() -> Course {
         Scheme::Weighted,
         2,
         standard_scale(),
-        "Exams 1–3 are 8% each, so Exam 03 (out of 100) is given the same worth as the 50-point exams. Canvas pools exam points instead, which will diverge from the syllabus once Exam 03 is graded. The cumulative make-up exam (replaces one or two of Exams 1–3) is not modelled; edit the scores directly to try it. No letter scale in the syllabus, so 90/80/70/60 is used.",
+        "Exams 1–3 are 8% each, so Exam 03 (out of 100 on Canvas) is entered as 50 points, like the other two exams; enter its score in points out of 50. Canvas pools exam points instead, which will diverge from the syllabus once Exam 03 is graded. The cumulative make-up exam (replaces one or two of Exams 1–3) is not modelled; edit the scores directly to try it. No letter scale in the syllabus, so 90/80/70/60 is used.",
         vec![
             category(
                 "Quiz",
@@ -255,7 +260,7 @@ pub fn cs411() -> Course {
                     g("Exam 02", 17.0, 50.0),
                     u("Exam 03", 100.0)
                         .with_worth(50.0)
-                        .with_note("Counts the same as Exams 01 and 02"),
+                        .with_note("Out of 100 on Canvas; counts 50 points, like Exams 01 and 02"),
                 ],
             ),
             category("Final Exam", 10.0, vec![u("Final Exam", 100.0)]),
@@ -301,7 +306,7 @@ pub fn cs440() -> Course {
         Scheme::Points,
         1,
         standard_scale(),
-        "Each Blackboard column is scaled to its syllabus point value. The 12 points for Weeklies, Reviews, Grammatical, OCL and Class Participation are all at full credit; the PDF pins down their total (67 possible) but not the exact split between Weeklies and Reviews, which doesn't change the grade. Attendance and the midterm/review sub-scores are informational only. Syllabus says letter breaks will be close to 90/80/70/60.",
+        "Each Blackboard column is entered as its syllabus point value (a 0–100 report worth 10 points scoring 85 is 8.5 of 10). The 12 points for Weeklies, Reviews, Grammatical, OCL and Class Participation are all at full credit; the PDF pins down their total (67 possible) but not the exact split between Weeklies and Reviews, which doesn't change the grade. Attendance and the midterm/review sub-scores are informational only. Syllabus says letter breaks will be close to 90/80/70/60.",
         vec![
             category(
                 "Individual Work",
@@ -404,7 +409,7 @@ fn math218_written() -> Vec<Item> {
 
 /// Syllabus policy: Online HW 15%, Written HW 15% (lowest of each dropped),
 /// Exam #1 20%, Exam #2 20%, Final 30%. The exams share one 70% category with
-/// item worths 20/20/30, which is exactly how the instructor's posted
+/// items worth 20/20/30 points, which is exactly how the instructor's posted
 /// "Midsemester Score" (65.39) was computed — see `tests/courses.rs`.
 pub fn math218() -> Course {
     course(
@@ -412,7 +417,7 @@ pub fn math218() -> Course {
         Scheme::Weighted,
         2,
         math218_scale(),
-        "Weighted per the syllabus (Canvas itself is set to total points, which counts the 65.39/0 Midsemester Score as extra points and shows 118.28%). Exams form one 70% category with worths 20/20/30, so missing exams are projected at your exam average — the same method behind the posted Midsemester Score. Good attendance adds 5 points to the final exam score.",
+        "Weighted per the syllabus (Canvas itself is set to total points, which counts the 65.39/0 Midsemester Score as extra points and shows 118.28%). Exams form one 70% category with items worth 20/20/30 points, so missing exams are projected at your exam average — the same method behind the posted Midsemester Score. Good attendance adds 5 points to the final exam score.",
         vec![
             category("MOM Homework (online)", 15.0, math218_mom()).drop_lowest(1),
             category("Written Homework", 15.0, math218_written()).drop_lowest(1),
@@ -424,7 +429,7 @@ pub fn math218() -> Course {
                     u("Exam #2", 50.0).with_worth(20.0),
                     u("Final Exam", 100.0)
                         .with_worth(30.0)
-                        .with_note("Points possible assumed; only the percentage matters"),
+                        .with_note("Worth 30 points; enter your score in points out of 30"),
                 ],
             ),
             category(

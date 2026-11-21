@@ -9,7 +9,8 @@ import {
   type Mutate,
 } from '../course'
 import { formatNumber, formatPercent } from '../format'
-import { rowClass, setWorth } from '../item'
+import { percentOf, rowClass, setPercent, toPercent } from '../item'
+import { GradeInput } from './GradeInput'
 import { NumberInput } from './NumberInput'
 
 interface Props {
@@ -136,10 +137,13 @@ export function CourseEditor({ course, graded, mutate }: Props) {
               <thead>
                 <tr>
                   <th className="name">Item</th>
-                  <th>Score</th>
-                  <th>Out of</th>
-                  <th title="How much the item counts in this category. Blank = same as 'Out of'.">Worth</th>
-                  <th title="Contribution to this category after scaling">Counts</th>
+                  <th
+                    className="grade"
+                    title="Enter a score in %, or points earned / possible. An item's points set how much it counts in the category; a score in % counts as 100 points."
+                  >
+                    Grade
+                  </th>
+                  <th title="The item's percentage, or why it doesn't count">Counts</th>
                   <th title="Excluded from the grade">Excl.</th>
                   {hasDrops && <th title="Never drop this item">Keep</th>}
                   <th aria-label="Actions" />
@@ -159,38 +163,27 @@ export function CourseEditor({ course, graded, mutate }: Props) {
                         />
                         {item.note && <small className="note">{item.note}</small>}
                       </td>
-                      <td>
-                        <NumberInput
-                          aria-label={`${item.name} score`}
-                          className="num"
-                          placeholder="–"
-                          value={item.score}
-                          onChange={(v) => mutate((d) => void (d.categories[ci].items[ii].score = v))}
-                        />
-                      </td>
-                      <td>
-                        <NumberInput
-                          aria-label={`${item.name} out of`}
-                          className="num"
-                          nullable={false}
-                          min={0}
-                          value={item.outOf}
-                          onChange={(v) => mutate((d) => void (d.categories[ci].items[ii].outOf = v ?? 0))}
-                        />
-                      </td>
-                      <td>
-                        <NumberInput
-                          aria-label={`${item.name} worth`}
-                          className="num"
-                          min={0}
-                          placeholder={String(item.outOf)}
-                          value={item.worth ?? null}
-                          onChange={(v) => mutate((d) => setWorth(d.categories[ci].items[ii], v))}
+                      <td className="grade">
+                        <GradeInput
+                          item={item}
+                          onPercent={(v) => mutate((d) => setPercent(d.categories[ci].items[ii], v))}
+                          onPoints={(earned, possible) =>
+                            mutate((d) => {
+                              const it = d.categories[ci].items[ii]
+                              it.earned = earned
+                              it.possible = possible
+                            })
+                          }
+                          onSwitchToPercent={() => mutate((d) => toPercent(d.categories[ci].items[ii]))}
                         />
                       </td>
                       <td className="counts">
                         {status === 'counted' ? (
-                          `${formatNumber(gi?.earned ?? 0, decimals)} / ${formatNumber(gi?.possible ?? 0, decimals)}`
+                          item.possible > 0 ? (
+                            formatPercent(percentOf(item), decimals)
+                          ) : (
+                            `+${formatNumber(item.earned ?? 0, decimals)} extra`
+                          )
                         ) : status === 'dropped' || status === 'excluded' ? (
                           <span className="tag">{status}</span>
                         ) : status === 'ungraded' ? (
