@@ -18,8 +18,12 @@ export function formatNumber(x: number, decimals = 2): string {
 }
 
 let nextId = 0
-/** Id for things the editor adds itself (the engine's ids contain "-s<n>", these never do). */
+/**
+ * A fresh id. Ids belong to the front-end (React keys, the selected course,
+ * which course an edit applies to); the engine has none. The time keeps ids
+ * unique across page loads, so they never collide with saved ones.
+ */
 export function newId(prefix = 'id'): string {
   nextId += 1
-  return `${prefix}-${Date.now().toString(36)}-c${nextId}`
+  return `${prefix}-${Date.now().toString(36)}-${nextId}`
 }

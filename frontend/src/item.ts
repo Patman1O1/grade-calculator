@@ -45,6 +45,14 @@ export function percentOf(item: Item): number | null {
   return round((item.earned / item.possible) * 100, 6)
 }
 
+/** An item as the engine returns it: no id (ids belong to the front-end). */
+export type EngineItem = Omit<Item, 'id'>
+
+/** Give an item from the engine an id: `id` if given (e.g. its saved id), otherwise a new one. */
+export function withItemId(item: EngineItem, id: string = newId('item')): Item {
+  return { id, ...item }
+}
+
 /** Table-row class for each status (see index.css). */
 const ROW_CLASS: Record<Status, string> = {
   counted: '',

@@ -11,7 +11,6 @@
 //! - [`course`]: a [`Course`] combines categories by total points or by weights
 //!   ([`Scheme`]), maps percentages to letters ([`Cutoff`]), and solves "what do
 //!   I need on the remaining work?" ([`Needed`]).
-//! - [`ids`]: fresh ids for courses, categories and items.
 //! - [`api`]: the operations the front-end needs (evaluate, summaries, import…).
 //! - [`wasm`]: the `wasm-bindgen` JavaScript interface over [`api`].
 //!
@@ -28,7 +27,6 @@
 pub mod api;
 pub mod category;
 pub mod course;
-pub mod ids;
 pub mod item;
 pub mod wasm;
 

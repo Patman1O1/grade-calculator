@@ -42,7 +42,6 @@ dependencies = [
 name = "grade-calculator"
 version = "0.1.0"
 dependencies = [
- "js-sys",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

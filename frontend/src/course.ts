@@ -3,8 +3,8 @@
  * scale and the "what do I need?" results. Mirrors backend/src/course/mod.rs
  * (camelCase JSON); keep the two in sync.
  */
-import type { Category } from './category'
-import { formatPercent, round } from './format'
+import { withCategoryIds, type Category, type EngineCategory } from './category'
+import { formatPercent, newId, round } from './format'
 
 /** How a course combines its categories. */
 export type Scheme = 'points' | 'weighted'
@@ -43,9 +43,24 @@ export type Needed =
   | { kind: 'impossible'; best: number | null }
   | { kind: 'needs'; fraction: number }
 
-/** A course's overall grade, for the course picker (from `engine.summaries`). */
+/** A course as the engine returns it: no ids (ids belong to the front-end). */
+export type EngineCourse = Omit<Course, 'id' | 'categories'> & { categories: EngineCategory[] }
+
+/**
+ * Give a course from the engine, and everything in it, ids: the ids of
+ * `saved` (the same course as stored, matched by position) where there is
+ * one, new ids otherwise.
+ */
+export function withIds(course: EngineCourse, saved?: Course): Course {
+  return {
+    id: saved?.id ?? newId('course'),
+    ...course,
+    categories: course.categories.map((c, i) => withCategoryIds(c, saved?.categories[i])),
+  }
+}
+
+/** A course's overall grade, for the course picker (from `engine.summaries`, in course order). */
 export interface CourseSummary {
-  id: string
   /** Overall percentage, or null when nothing is graded. */
   percent: number | null
   letter: string | null
@@ -80,14 +95,6 @@ export function newCutoff(): Cutoff {
   return { letter: '?', min: 0 }
 }
 
-/**
- * The graded copies of a course's categories, by id (see `gradedItems` in
- * category.ts for why by id).
- */
-export function gradedCategories(graded: Course | null): Map<string, Category> {
-  return new Map(graded?.categories.map((c) => [c.id, c]))
-}
-
 /** Return `courses` with the course `id` replaced by an edited copy (`fn` edits a draft). */
 export function updateCourse(courses: Course[], id: string, fn: (draft: Course) => void): Course[] {
   return courses.map((c) => {
@@ -98,9 +105,9 @@ export function updateCourse(courses: Course[], id: string, fn: (draft: Course) 
   })
 }
 
-/** Each course's overall percentage by course id, for the course picker. */
-export function percentsById(summaries: CourseSummary[]): Map<string, number | null> {
-  return new Map(summaries.map((s) => [s.id, s.percent]))
+/** Each course's overall percentage by course id, for the course picker. `summaries` is in course order. */
+export function percentsById(courses: Course[], summaries: CourseSummary[]): Map<string, number | null> {
+  return new Map(courses.map((c, i) => [c.id, summaries[i]?.percent ?? null]))
 }
 
 /** File name for exporting a course as JSON ("CS-411-Artificial-Intelligence.json"). */

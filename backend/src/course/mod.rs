@@ -6,7 +6,6 @@ use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 
 use crate::category::Category;
-use crate::ids::new_id;
 use crate::item::Item;
 
 /// How a course combines its categories.
@@ -48,8 +47,6 @@ pub enum Needed {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Course {
-    #[serde(default)]
-    pub id: String,
     pub name: String,
     pub scheme: Scheme,
     pub categories: Vec<Category>,
@@ -96,11 +93,9 @@ impl Course {
     /// category with one ungraded item each, and the standard letter scale.
     pub fn blank() -> Course {
         let category = |name: &str, weight: f64, item: &str, possible: f64| Category {
-            id: new_id("cat"),
             name: name.to_owned(),
             weight,
             items: vec![Item {
-                id: new_id("item"),
                 name: item.to_owned(),
                 earned: None,
                 possible,
@@ -109,7 +104,6 @@ impl Course {
             ..Default::default()
         };
         Course {
-            id: new_id("course"),
             name: "New course".to_owned(),
             scheme: Scheme::Weighted,
             categories: vec![
@@ -120,19 +114,6 @@ impl Course {
             display_decimals: Some(2),
             ..Default::default()
         }
-    }
-
-    /// The same course with fresh ids for it and everything in it, so a copy
-    /// (an import or a duplicate) never collides with the original.
-    pub fn with_fresh_ids(mut self) -> Course {
-        self.id = new_id("course");
-        for c in &mut self.categories {
-            c.id = new_id("cat");
-            for i in &mut c.items {
-                i.id = new_id("item");
-            }
-        }
-        self
     }
 
     /// Grade the course in place: grades every category (and item), then fills

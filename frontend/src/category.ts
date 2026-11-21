@@ -3,7 +3,7 @@
  * backend/src/category/mod.rs (camelCase JSON); keep the two in sync.
  */
 import { newId } from './format'
-import { newItem, type Item } from './item'
+import { newItem, withItemId, type EngineItem, type Item } from './item'
 
 export interface Category {
   id: string
@@ -40,11 +40,18 @@ export function hasDropRules(category: Category): boolean {
   return (category.dropLowest ?? 0) > 0 || (category.dropHighest ?? 0) > 0
 }
 
+/** A category as the engine returns it: no ids (ids belong to the front-end). */
+export type EngineCategory = Omit<Category, 'id' | 'items'> & { items: EngineItem[] }
+
 /**
- * The graded copies of a category's items, by id. Looking up by id (not
- * position) keeps results on the right row even if the graded copy is
- * from a slightly older version of the category.
+ * Give a category from the engine, and its items, ids: the ids of `saved`
+ * (the same category as stored, matched by position) where there is one,
+ * new ids otherwise.
  */
-export function gradedItems(graded: Category | undefined): Map<string, Item> {
-  return new Map(graded?.items.map((i) => [i.id, i]))
+export function withCategoryIds(category: EngineCategory, saved?: Category): Category {
+  return {
+    id: saved?.id ?? newId('cat'),
+    ...category,
+    items: category.items.map((item, i) => withItemId(item, saved?.items[i]?.id)),
+  }
 }

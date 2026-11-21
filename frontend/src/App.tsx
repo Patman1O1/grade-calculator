@@ -59,7 +59,7 @@ export default function App() {
   const course = courses.find((c) => c.id === state.selectedId) ?? courses[0] ?? null
   const percents = useMemo(() => {
     try {
-      return percentsById(engine.summaries(courses))
+      return percentsById(courses, engine.summaries(courses))
     } catch {
       return new Map<string, number | null>()
     }

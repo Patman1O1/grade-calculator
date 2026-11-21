@@ -41,13 +41,15 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 |---|---|
 | `blankCourse()` | a starter `Course` |
 | `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
-| `summaries(courses)` | `[{ id, percent, letter }]` |
-| `normalizeCourses(courses)` | saved courses converted to the current format, with their ids kept |
-| `importCourses(data)` | the courses in `data` (one or a list), validated, with fresh ids |
+| `summaries(courses)` | `[{ percent, letter }]`, in the same order as `courses` |
+| `normalizeCourses(courses)` | saved courses converted to the current format, in the same order (`null` for entries that aren't courses) |
+| `importCourses(data)` | the courses in `data` (one or a list), validated |
 
 A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`) on each item. They are left out of ungraded courses and ignored on input.
 
-`normalizeCourses(courses)` converts courses saved by an earlier version of the app (items stored as `score` / `outOf` / `worth`) to the current format, keeping their ids; the app runs saved courses through it on startup. `importCourses` accepts that older format too.
+`normalizeCourses(courses)` converts courses saved by an earlier version of the app (items stored as `score` / `outOf` / `worth`) to the current format; the app runs saved courses through it on startup. `importCourses` accepts that older format too.
+
+Ids are the front-end's alone (React keys, the selected course, which course an edit applies to); the engine has none and ignores any it is given. [`frontend/src/engine.ts`](frontend/src/engine.ts) gives every course that comes back from the engine ids: new ones for new, imported and duplicated courses, and the saved ones (matched by position) for courses loaded from storage. Graded results and summaries are matched to the course by position.
 
 ## Deploying
 

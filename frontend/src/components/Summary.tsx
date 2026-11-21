@@ -57,8 +57,8 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
       <section className="panel breakdown">
         <h3>Breakdown</h3>
         <ul>
-          {course.categories.map((category) => {
-            const c = graded.categories.find((g) => g.id === category.id)
+          {course.categories.map((category, ci) => {
+            const c = graded.categories[ci]
             if (!c) return null
             const share =
               weighted && gradedPossible > 0 && c.percent !== undefined && category.weight > 0

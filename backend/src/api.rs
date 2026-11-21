@@ -45,19 +45,17 @@ pub fn evaluate(course: &Course, targets: &[f64]) -> Evaluation {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CourseSummary {
-    pub id: String,
     pub percent: Option<f64>,
     pub letter: Option<String>,
 }
 
-/// Grade every course (for the course picker).
+/// Grade every course (for the course picker), in the same order.
 pub fn summaries(courses: Vec<Course>) -> Vec<CourseSummary> {
     courses
         .into_iter()
         .map(|mut c| {
             c.grade();
             CourseSummary {
-                id: c.id,
                 percent: c.percent,
                 letter: c.letter,
             }
@@ -67,15 +65,10 @@ pub fn summaries(courses: Vec<Course>) -> Vec<CourseSummary> {
 
 pub const NOT_A_COURSE: &str = "That file is not a course exported from this calculator.";
 
-/// Validate exported JSON (one course or a list of them) and give every
-/// course fresh ids so it can be added next to existing ones. Entries that
-/// aren't courses are skipped; it is an error if none are. Also used to
-/// duplicate a course.
+/// Validate exported JSON (one course or a list of them). Entries that
+/// aren't courses are skipped; it is an error if none are.
 pub fn import_courses(data: Value) -> Result<Vec<Course>, &'static str> {
-    let courses: Vec<Course> = parse_courses(data)
-        .into_iter()
-        .map(Course::with_fresh_ids)
-        .collect();
+    let courses: Vec<Course> = parse_courses(data).into_iter().flatten().collect();
     if courses.is_empty() {
         Err(NOT_A_COURSE)
     } else {
@@ -84,19 +77,20 @@ pub fn import_courses(data: Value) -> Result<Vec<Course>, &'static str> {
 }
 
 /// Bring courses saved by an earlier version of the app up to the current
-/// format (e.g. items stored as `score` / `outOf` / `worth`), keeping their
-/// ids. Entries that aren't courses are dropped.
-pub fn normalize_courses(data: Value) -> Vec<Course> {
+/// format (e.g. items stored as `score` / `outOf` / `worth`). The result is
+/// in the same order as the input, with `None` for entries that aren't
+/// courses, so the caller can match each one to what it saved.
+pub fn normalize_courses(data: Value) -> Vec<Option<Course>> {
     parse_courses(data)
 }
 
-/// The courses in `data` (one course or a list), skipping anything that isn't one.
-fn parse_courses(data: Value) -> Vec<Course> {
+/// Each entry of `data` (one course or a list) as a course, or `None` if it isn't one.
+fn parse_courses(data: Value) -> Vec<Option<Course>> {
     let list = match data {
         Value::Array(list) => list,
         other => vec![other],
     };
     list.into_iter()
-        .filter_map(|v| serde_json::from_value::<Course>(v).ok())
+        .map(|v| serde_json::from_value::<Course>(v).ok())
         .collect()
 }
