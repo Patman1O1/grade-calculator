@@ -33,9 +33,9 @@ flowchart LR
   subgraph engine["backend/ (Rust → engine_bg.wasm)"]
     wasm["wasm.rs<br/>#[wasm_bindgen] exports"]
     api["api.rs<br/>evaluate, summaries, import"]
-    item["item.rs<br/>Item, Status"]
-    category["category.rs<br/>Category + drop search"]
-    course["course.rs<br/>Course, Scheme, Cutoff, Needed"]
+    item["item/mod.rs<br/>Item, Status"]
+    category["category/mod.rs<br/>Category + drop search"]
+    course["course/mod.rs<br/>Course, Scheme, Cutoff, Needed"]
     examples["examples.rs"]
   end
 
@@ -58,7 +58,7 @@ flowchart LR
   category -->|grades| item
 ```
 
-## 2. Domain model and grading (`backend/src/item.rs`, `category.rs`, `course.rs`; mirrored in `frontend/src/types.ts`)
+## 2. Domain model and grading (`backend/src/item/mod.rs`, `category/mod.rs`, `course/mod.rs`; mirrored in `frontend/src/types.ts`)
 
 A `Course` owns its categories and letter scale, and each `Category` owns its items. Each type lives in its own module together with the logic that grades it, and the grade lives on the same types: the fields marked `/` are filled in by `grade()`. `Course::grade` grades each category, and `Category::grade` grades each item and then applies its drop rules.
 
@@ -149,9 +149,10 @@ classDiagram
 - Every node keeps its `id`, so the front-end matches graded values to rows by id. An evaluation that is one keystroke behind never lands on the wrong row.
 - `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
+- Each of `item/`, `category/` and `course/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all six types at the crate root.
 
-## 3. "What do I need?" (`backend/src/course.rs`)
+## 3. "What do I need?" (`backend/src/course/mod.rs`)
 
 `Needed` is what `Course::needed_on_remaining` returns for one target percentage.
 
@@ -186,7 +187,7 @@ classDiagram
   Needed <|-- Needs
 ```
 
-## 4. Drop search (`backend/src/category.rs`, private)
+## 4. Drop search (`backend/src/category/mod.rs`, private)
 
 ```mermaid
 classDiagram
