@@ -39,7 +39,6 @@ flowchart LR
     item["item/mod.rs<br/>Item, Status"]
     category["category/mod.rs<br/>Category + drop search"]
     course["course/mod.rs<br/>Course, Scheme, Cutoff, Needed"]
-    ids["ids.rs<br/>new_id"]
   end
 
   main --> App
@@ -60,7 +59,6 @@ flowchart LR
   glue -->|"calls (JS objects via serde-wasm-bindgen)"| wasm
   wasm --> api
   api --> course
-  course --> ids
   course -->|grades| category
   category -->|grades| item
 ```
@@ -79,7 +77,6 @@ classDiagram
   }
   class Course {
     <<struct>>
-    +id: String
     +name: String
     +scheme: Scheme
     +categories: Vec~Category~
@@ -99,7 +96,6 @@ classDiagram
   }
   class Category {
     <<struct>>
-    +id: String
     +name: String
     +weight: f64
     +dropLowest?: f64
@@ -114,7 +110,6 @@ classDiagram
   }
   class Item {
     <<struct>>
-    +id: String
     +name: String
     +earned?: f64
     +possible: f64
@@ -150,7 +145,7 @@ classDiagram
 - `excluded`, `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false, so the JSON matches what the TypeScript-only version of the app exported.
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
-- Every node keeps its `id`, so the front-end matches graded values to rows by id. An evaluation that is one keystroke behind never lands on the wrong row.
+- The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
 - An item is `earned` out of `possible` points; those points are also how much it counts in its category. Deserialising goes through a private `RawItem` (`#[serde(try_from)]`) that also accepts the older `score` / `outOf` / `worth` form and converts it as the old engine scored it (`score / outOf × worth` out of `worth`), so saved courses and old exports still load.
 - `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
@@ -224,30 +219,23 @@ classDiagram
 
 `Category::apply_drops` collects the graded, droppable items as `Candidate`s and calls `choose_kept`, which runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). Items marked `neverDrop` are held fixed, and at least one item always stays.
 
-## 5. Ids and the blank course (`backend/src/ids.rs`, `backend/src/course/mod.rs`)
+## 5. The blank course (`backend/src/course/mod.rs`)
 
 ```mermaid
 classDiagram
   direction LR
-  class ids {
-    <<module>>
-    +new_id(prefix: &str)$ String
-    -now_millis()$ u64
-  }
   class Course {
     <<struct>>
     +blank()$ Course
-    +with_fresh_ids(self) Course
   }
   class course {
     <<module>>
     +standard_scale()$ Vec~Cutoff~
   }
-  Course ..> ids : new_id
   Course ..> course : standard_scale
 ```
 
-`Course::blank` is the starting point behind the app's **New** button. `Course::with_fresh_ids` gives an imported or duplicated course new ids so it never collides with the original. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
+`Course::blank` is the starting point behind the app's **New** button: weighted, a Homework and an Exams category with one ungraded item each, and the standard 90/80/70/60 scale.
 
 The four courses in `docs/` live in `backend/tests/fixtures/mod.rs` as test data only; `tests/courses.rs` checks that the engine reproduces every total in their gradebook PDFs.
 
@@ -263,7 +251,7 @@ classDiagram
     +blankCourse()$ Course
     +evaluate(course: JsValue, targets: JsValue)$ Evaluation
     +summaries(courses: JsValue)$ CourseSummary[]
-    +normalizeCourses(courses: JsValue)$ Course[]
+    +normalizeCourses(courses: JsValue)$ (Course or null)[]
     +importCourses(data: JsValue)$ Course[]
     -to_js(value)$ JsValue
     -from_js(value, what)$ T
@@ -274,7 +262,7 @@ classDiagram
     +evaluate(course: &Course, targets: &[f64])$ Evaluation
     +summaries(courses: Vec~Course~)$ Vec~CourseSummary~
     +import_courses(data: Value)$ Result~Vec~Course~, &str~
-    +normalize_courses(data: Value)$ Vec~Course~
+    +normalize_courses(data: Value)$ Vec~Option~Course~~
   }
   class Evaluation {
     <<struct>>
@@ -289,7 +277,6 @@ classDiagram
   }
   class CourseSummary {
     <<struct>>
-    +id: String
     +percent?: f64
     +letter?: String
   }
@@ -314,7 +301,7 @@ sequenceDiagram
   App->>App: new course state, saved to localStorage
   App->>Engine: evaluate(course, targets)
   Engine-->>App: { course (graded), remaining, needs }
-  App->>Editor: graded course (looked up by id)
+  App->>Editor: graded course (matched by position)
   App->>Summary: evaluation
 ```
 
@@ -397,9 +384,10 @@ classDiagram
     +targets(course, custom)$ number[]
     +totalWeight(course)$ number
     +newCutoff()$ Cutoff
-    +gradedCategories(graded)$ Map~string, Category~
+    +EngineCourse
+    +withIds(course, saved?)$ Course
     +updateCourse(courses, id, fn)$ Course[]
-    +percentsById(summaries)$ Map~string, number or null~
+    +percentsById(courses, summaries)$ Map~string, number or null~
     +exportFileName(course)$ string
     +describeNeed(need)$ string
   }
@@ -409,7 +397,8 @@ classDiagram
     +newCategory()$ Category
     +addItem(category)$ void
     +hasDropRules(category)$ boolean
-    +gradedItems(graded)$ Map~string, Item~
+    +EngineCategory
+    +withCategoryIds(category, saved?)$ Category
   }
   class item {
     <<module>>
@@ -418,9 +407,11 @@ classDiagram
     +rowClass(status)$ string
     +percentOf(item)$ number or null
     +newItem(name, previous)$ Item
+    +EngineItem
+    +withItemId(item, id?)$ Item
   }
   course ..> category : Category
   category ..> item : Item, newItem
 ```
 
-`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` gives every course the engine returns its ids with `withIds` (new ids, or the saved ones matched by position in `normalizeCourses`), and also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.

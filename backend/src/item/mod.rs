@@ -29,7 +29,6 @@ pub enum Status {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", try_from = "RawItem")]
 pub struct Item {
-    pub id: String,
     pub name: String,
     /// Points earned, or `None` when the item has not been graded yet.
     pub earned: Option<f64>,
@@ -58,8 +57,6 @@ pub struct Item {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawItem {
-    #[serde(default)]
-    id: String,
     name: String,
     #[serde(default)]
     earned: Option<f64>,
@@ -99,7 +96,6 @@ impl TryFrom<RawItem> for Item {
             (None, None) => return Err(format!("item {:?} has no points possible", raw.name)),
         };
         Ok(Item {
-            id: raw.id,
             name: raw.name,
             earned,
             possible,

@@ -22,7 +22,6 @@ fn cat(weight: f64, items: Vec<Item>) -> Category {
 
 fn course(scheme: Scheme, categories: Vec<Category>) -> Course {
     Course {
-        id: "x".into(),
         name: "x".into(),
         scheme,
         categories,

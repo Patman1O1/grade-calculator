@@ -12,8 +12,6 @@ use crate::item::Item;
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Category {
-    #[serde(default)]
-    pub id: String,
     pub name: String,
     /// Relative weight; only used by the weighted scheme.
     pub weight: f64,

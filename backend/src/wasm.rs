@@ -22,7 +22,7 @@ fn from_js<T: DeserializeOwned>(value: JsValue, what: &str) -> Result<T, JsError
     serde_wasm_bindgen::from_value(value).map_err(|e| JsError::new(&format!("invalid {what}: {e}")))
 }
 
-/// `blankCourse(): Course`, a starter course with fresh ids.
+/// `blankCourse(): Course`, a starter course.
 #[wasm_bindgen(js_name = blankCourse)]
 pub fn blank_course() -> Result<JsValue, JsError> {
     to_js(&Course::blank())
@@ -42,15 +42,16 @@ pub fn summaries(courses: JsValue) -> Result<JsValue, JsError> {
     to_js(&api::summaries(from_js(courses, "courses")?))
 }
 
-/// `normalizeCourses(courses): Course[]`: convert courses saved by an earlier
-/// version of the app to the current format, keeping their ids.
+/// `normalizeCourses(courses): (Course | null)[]`: convert courses saved by an
+/// earlier version of the app to the current format, in the same order, with
+/// `null` for entries that aren't courses.
 #[wasm_bindgen(js_name = normalizeCourses)]
 pub fn normalize_courses(courses: JsValue) -> Result<JsValue, JsError> {
     to_js(&api::normalize_courses(from_js(courses, "courses")?))
 }
 
-/// `importCourses(data): Course[]`: validate parsed JSON (one course or a list)
-/// and return copies with fresh ids. Throws if nothing in it is a course.
+/// `importCourses(data): Course[]`: validate parsed JSON (one course or a list).
+/// Throws if nothing in it is a course.
 #[wasm_bindgen(js_name = importCourses)]
 pub fn import_courses(data: JsValue) -> Result<JsValue, JsError> {
     let data = from_js(data, "file").map_err(|_| JsError::new(api::NOT_A_COURSE))?;

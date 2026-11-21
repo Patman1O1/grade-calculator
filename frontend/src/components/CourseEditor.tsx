@@ -1,10 +1,10 @@
-import { addItem, gradedItems, hasDropRules, newCategory } from '../category'
+import { addItem, hasDropRules, newCategory } from '../category'
 import {
   decimals as decimalsOf,
-  gradedCategories as gradedCategoriesOf,
   newCutoff,
   totalWeight as totalWeightOf,
   type Course,
+  type EngineCourse,
   type Cutoff,
   type Mutate,
 } from '../course'
@@ -14,8 +14,11 @@ import { NumberInput } from './NumberInput'
 
 interface Props {
   course: Course
-  /** Graded copy of the course from the engine; null if it couldn't be graded. */
-  graded: Course | null
+  /**
+   * Graded copy of the course from the engine; null if it couldn't be graded.
+   * Its categories and items are in the same order as `course`'s.
+   */
+  graded: EngineCourse | null
   mutate: Mutate
 }
 
@@ -24,7 +27,6 @@ const PENDING = '…'
 export function CourseEditor({ course, graded, mutate }: Props) {
   const weighted = course.scheme === 'weighted'
   const decimals = decimalsOf(course)
-  const gradedCategories = gradedCategoriesOf(graded)
   const totalWeight = totalWeightOf(course)
 
   return (
@@ -61,8 +63,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
       </section>
 
       {course.categories.map((cat, ci) => {
-        const gc = gradedCategories.get(cat.id)
-        const gradedItemsById = gradedItems(gc)
+        const gc = graded?.categories[ci]
         const hasDrops = hasDropRules(cat)
         return (
           <section className="panel category" key={cat.id}>
@@ -148,7 +149,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
               </thead>
               <tbody>
                 {cat.items.map((item, ii) => {
-                  const gi = gradedItemsById.get(item.id)
+                  const gi = gc?.items[ii]
                   const status = gi?.status
                   return (
                     <tr key={item.id} className={rowClass(status)}>

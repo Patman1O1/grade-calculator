@@ -6,13 +6,11 @@
 #![allow(dead_code)] // each test file uses a different subset
 
 use grade_calculator::course::standard_scale;
-use grade_calculator::ids::new_id;
 use grade_calculator::{Category, Course, Cutoff, Item, Scheme};
 
 /// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
     Item {
-        id: new_id("item"),
         name: name.to_owned(),
         earned: score,
         possible: out_of,
@@ -59,7 +57,6 @@ impl ItemExt for Item {
 
 fn category(name: &str, weight: f64, items: Vec<Item>) -> Category {
     Category {
-        id: new_id("cat"),
         name: name.to_owned(),
         weight,
         drop_lowest: None,
@@ -98,7 +95,6 @@ fn course(
     categories: Vec<Category>,
 ) -> Course {
     Course {
-        id: new_id("course"),
         name: name.to_owned(),
         scheme,
         categories,
