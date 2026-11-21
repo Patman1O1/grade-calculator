@@ -1,7 +1,9 @@
 //! Every expected value below is copied from docs/<course>/grades-11-5-2026.pdf
 //! (and rounded the same way the gradebook displays it).
 
-use grade_calculator::examples::{cs401, cs411, cs440, math218, math218_canvas};
+mod fixtures;
+
+use fixtures::{cs401, cs411, cs440, math218, math218_canvas};
 use grade_calculator::{Course, Status, round};
 
 /// `(percent, earned, possible)` of a category, rounded to 2 places.

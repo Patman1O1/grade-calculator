@@ -1,10 +1,9 @@
 //! Tests of the operations the front-end calls (through `wasm-bindgen`), and of
 //! the JSON shapes they produce.
 
-use grade_calculator::api::{
-    NOT_A_COURSE, evaluate, examples, import_courses, normalize_courses, summaries,
-};
-use grade_calculator::examples::{blank_course, example};
+mod fixtures;
+
+use grade_calculator::api::{NOT_A_COURSE, evaluate, import_courses, normalize_courses, summaries};
 use grade_calculator::{Course, Status};
 use serde_json::{Value, json};
 
@@ -13,23 +12,19 @@ fn to_json<T: serde::Serialize>(v: &T) -> Value {
 }
 
 #[test]
-fn lists_and_builds_examples() {
-    let list = to_json(&examples());
-    assert_eq!(list.as_array().unwrap().len(), 5);
-    assert_eq!(list[0]["key"], "cs401");
-
-    let course = to_json(&example("cs411").unwrap());
+fn blank_course_is_ungraded_with_fresh_ids() {
+    let course = to_json(&Course::blank());
+    assert_eq!(course["name"], "New course");
     assert_eq!(course["scheme"], "weighted");
-    assert_eq!(course["categories"][0]["dropLowest"], 2.0);
+    assert_eq!(course["categories"].as_array().unwrap().len(), 2);
+    assert_eq!(course["scale"][0], json!({ "letter": "A", "min": 90.0 }));
     assert!(course["id"].as_str().unwrap().starts_with("course-"));
     // Ungraded courses carry no computed fields.
     assert!(course.get("percent").is_none());
     assert!(course["categories"][0].get("earned").is_none());
     assert!(course["categories"][0]["items"][0].get("status").is_none());
-
-    assert!(example("nope").is_none());
     // Every call gives fresh ids.
-    assert_ne!(example("cs401").unwrap().id, example("cs401").unwrap().id);
+    assert_ne!(Course::blank().id, Course::blank().id);
 }
 
 #[test]
@@ -71,8 +66,8 @@ fn evaluates_a_course_and_solves_targets() {
 
 #[test]
 fn summarises_every_course() {
-    let c1 = example("cs401").unwrap();
-    let c2 = blank_course();
+    let c1 = fixtures::cs401();
+    let c2 = Course::blank();
     let out = summaries(vec![c1.clone(), c2]);
     assert_eq!(out[0].id, c1.id);
     assert!((out[0].percent.unwrap() - 56.95).abs() < 0.005);
@@ -84,7 +79,7 @@ fn summarises_every_course() {
 
 #[test]
 fn import_validates_and_reassigns_ids() {
-    let course = to_json(&example("math218").unwrap());
+    let course = to_json(&fixtures::math218());
     let imported = import_courses(json!([course, { "not": "a course" }])).unwrap();
     assert_eq!(imported.len(), 1);
     assert_eq!(imported[0].name, course["name"]);

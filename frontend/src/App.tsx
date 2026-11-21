@@ -35,7 +35,7 @@ function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
 }
 
 /**
- * Saved courses, or none on a first visit (examples are under "Add example…").
+ * Saved courses, or none on a first visit.
  * Saved courses go through the engine so ones from older versions of the app
  * (items stored as score / outOf / worth) load in the current format.
  */
@@ -51,7 +51,6 @@ function initialState(): SavedState {
 
 export default function App() {
   const [state, setState] = useState<SavedState>(initialState)
-  const examples = useMemo(() => engine.examples(), [])
   const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => saveState(state), [state])
@@ -128,20 +127,6 @@ export default function App() {
           <button type="button" onClick={() => addCourses([engine.blankCourse()])}>
             New
           </button>
-          <select
-            aria-label="Load example"
-            value=""
-            onChange={(e) => {
-              if (e.target.value) addCourses([engine.example(e.target.value)])
-            }}
-          >
-            <option value="">Add example…</option>
-            {examples.map((e) => (
-              <option key={e.key} value={e.key}>
-                {e.label}
-              </option>
-            ))}
-          </select>
           {course && (
             <button type="button" onClick={duplicate}>
               Duplicate

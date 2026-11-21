@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use wasm_bindgen::prelude::*;
 
-use crate::{Course, api, examples};
+use crate::{Course, api};
 
 fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
     value
@@ -22,24 +22,10 @@ fn from_js<T: DeserializeOwned>(value: JsValue, what: &str) -> Result<T, JsError
     serde_wasm_bindgen::from_value(value).map_err(|e| JsError::new(&format!("invalid {what}: {e}")))
 }
 
-/// `examples(): ExampleInfo[]`
-#[wasm_bindgen]
-pub fn examples() -> Result<JsValue, JsError> {
-    to_js(&api::examples())
-}
-
-/// `example(key): Course`, with fresh ids. Throws for an unknown key.
-#[wasm_bindgen]
-pub fn example(key: &str) -> Result<JsValue, JsError> {
-    let course =
-        examples::example(key).ok_or_else(|| JsError::new(&format!("no example named {key:?}")))?;
-    to_js(&course)
-}
-
 /// `blankCourse(): Course`, a starter course with fresh ids.
 #[wasm_bindgen(js_name = blankCourse)]
 pub fn blank_course() -> Result<JsValue, JsError> {
-    to_js(&examples::blank_course())
+    to_js(&Course::blank())
 }
 
 /// `evaluate(course, targets): Evaluation`

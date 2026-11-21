@@ -39,7 +39,7 @@ flowchart LR
     item["item/mod.rs<br/>Item, Status"]
     category["category/mod.rs<br/>Category + drop search"]
     course["course/mod.rs<br/>Course, Scheme, Cutoff, Needed"]
-    examples["examples.rs"]
+    ids["ids.rs<br/>new_id"]
   end
 
   main --> App
@@ -59,10 +59,8 @@ flowchart LR
   coursets --> categoryts --> itemts
   glue -->|"calls (JS objects via serde-wasm-bindgen)"| wasm
   wasm --> api
-  wasm --> examples
   api --> course
-  api --> examples
-  examples --> course
+  course --> ids
   course -->|grades| category
   category -->|grades| item
 ```
@@ -226,43 +224,32 @@ classDiagram
 
 `Category::apply_drops` collects the graded, droppable items as `Candidate`s and calls `choose_kept`, which runs the Canvas-exact parametric search for drop-lowest (`Max`) and drop-highest (`Min`). Items marked `neverDrop` are held fixed, and at least one item always stays.
 
-## 5. Example courses (`backend/src/examples.rs`)
+## 5. Ids and the blank course (`backend/src/ids.rs`, `backend/src/course/mod.rs`)
 
 ```mermaid
 classDiagram
   direction LR
-  class examples {
+  class ids {
     <<module>>
-    +EXAMPLES: [Example; 5]$
     +new_id(prefix: &str)$ String
-    +re_id(course: Course)$ Course
-    +standard_scale()$ Vec~Cutoff~
-    +cs401()$ Course
-    +cs411()$ Course
-    +cs440()$ Course
-    +math218()$ Course
-    +math218_canvas()$ Course
-    +example(key: &str)$ Option~Course~
-    +blank_course()$ Course
-    -item(name, score, out_of)$ Item
-    -g(name, score, out_of)$ Item
-    -u(name, out_of)$ Item
-    -category(name, weight, items)$ Category
-    -math218_scale()$ Vec~Cutoff~
-    -math218_mom()$ Vec~Item~
-    -math218_written()$ Vec~Item~
+    -now_millis()$ u64
   }
-  class Example {
+  class Course {
     <<struct>>
-    +key: &str
-    +label: &str
-    +build: fn() Course
+    +blank()$ Course
+    +with_fresh_ids(self) Course
   }
-  examples "1" *-- "5" Example : EXAMPLES
-  Example ..> Course : build()
+  class course {
+    <<module>>
+    +standard_scale()$ Vec~Cutoff~
+  }
+  Course ..> ids : new_id
+  Course ..> course : standard_scale
 ```
 
-`g` builds a graded item and `u` an ungraded one; private builder methods fill in the rest: `with_worth` rescales an item to its syllabus point value (85/100 worth 10 becomes 8.5/10), and `exclude`, `with_note` and `drop_lowest` set the optional fields. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
+`Course::blank` is the starting point behind the app's **New** button. `Course::with_fresh_ids` gives an imported or duplicated course new ids so it never collides with the original. Engine ids contain `-s<n>` and the ids the editor makes itself contain `-c<n>`, so the two never collide. `new_id` also includes the current time (from JavaScript's `Date.now()` in the browser, where `std::time` isn't available), so ids stay unique across page loads.
+
+The four courses in `docs/` live in `backend/tests/fixtures/mod.rs` as test data only; `tests/courses.rs` checks that the engine reproduces every total in their gradebook PDFs.
 
 ## 6. Engine interface (`backend/src/api.rs`, `backend/src/wasm.rs`)
 
@@ -273,8 +260,6 @@ classDiagram
   direction LR
   class wasm {
     <<module>>
-    +examples()$ ExampleInfo[]
-    +example(key: &str)$ Course
     +blankCourse()$ Course
     +evaluate(course: JsValue, targets: JsValue)$ Evaluation
     +summaries(courses: JsValue)$ CourseSummary[]
@@ -286,7 +271,6 @@ classDiagram
   class api {
     <<module>>
     +NOT_A_COURSE: &str$
-    +examples()$ Vec~ExampleInfo~
     +evaluate(course: &Course, targets: &[f64])$ Evaluation
     +summaries(courses: Vec~Course~)$ Vec~CourseSummary~
     +import_courses(data: Value)$ Result~Vec~Course~, &str~
@@ -309,16 +293,10 @@ classDiagram
     +percent?: f64
     +letter?: String
   }
-  class ExampleInfo {
-    <<struct>>
-    +key: &str
-    +label: &str
-  }
   wasm ..> api : wraps
   api ..> Evaluation
   Evaluation *-- TargetNeed
   api ..> CourseSummary
-  api ..> ExampleInfo
 ```
 
 All `wasm` functions return `Result<JsValue, JsError>`; the types shown are what the JavaScript side receives.
@@ -350,7 +328,6 @@ classDiagram
   class App {
     <<component>>
     -state: SavedState
-    -examples: ExampleInfo[]
     -percents: Map~string, number or null~
     -mutate: Mutate
     -initialState()$ SavedState
@@ -384,8 +361,6 @@ classDiagram
   class engine {
     <<module>>
     +loadEngine()$ Promise~void~
-    +examples()$ ExampleInfo[]
-    +example(key)$ Course
     +blankCourse()$ Course
     +evaluate(course, targets)$ Evaluation
     +summaries(courses)$ CourseSummary[]
@@ -448,4 +423,4 @@ classDiagram
   category ..> item : Item, newItem
 ```
 
-`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` also holds the engine's other result types (`Evaluation`, `ExampleInfo`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.

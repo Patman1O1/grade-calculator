@@ -1,47 +1,13 @@
-//! Example courses, transcribed from `docs/<course>/grades-11-5-2026.pdf` and
-//! configured from `docs/<course>/syllabus.pdf`. `tests/courses.rs` checks that
-//! each one reproduces the numbers printed in its gradebook PDF.
+//! The four courses in `docs/`, transcribed from each
+//! `docs/<course>/grades-11-5-2026.pdf` and configured from its
+//! `syllabus.pdf`. Test data only: `tests/courses.rs` checks that the engine
+//! reproduces every total printed in those gradebooks.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+#![allow(dead_code)] // each test file uses a different subset
 
-use crate::{Category, Course, Cutoff, Item, Scheme};
-
-/// A fresh id: a counter plus the current time, so ids stay unique across
-/// page loads (courses saved in an earlier visit keep their ids). Engine ids
-/// carry an `s` marker so they never collide with the `c`-marked ids the
-/// front-end generates for items it adds itself.
-pub fn new_id(prefix: &str) -> String {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let n = NEXT.fetch_add(1, Ordering::Relaxed) + 1;
-    format!("{prefix}-{:x}-s{n}", now_millis())
-}
-
-/// Milliseconds since the Unix epoch. `std::time::SystemTime` panics in the
-/// browser (wasm32-unknown-unknown), so there we ask JavaScript instead.
-#[cfg(target_arch = "wasm32")]
-fn now_millis() -> u64 {
-    js_sys::Date::now() as u64
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-/// Give a course (and everything in it) fresh ids so copies never collide.
-pub fn re_id(mut course: Course) -> Course {
-    course.id = new_id("course");
-    for c in &mut course.categories {
-        c.id = new_id("cat");
-        for i in &mut c.items {
-            i.id = new_id("item");
-        }
-    }
-    course
-}
+use grade_calculator::course::standard_scale;
+use grade_calculator::ids::new_id;
+use grade_calculator::{Category, Course, Cutoff, Item, Scheme};
 
 /// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
@@ -64,7 +30,14 @@ fn u(name: &str, out_of: f64) -> Item {
     item(name, None, out_of)
 }
 
-impl Item {
+/// Builder methods for the course data below.
+trait ItemExt {
+    fn with_worth(self, worth: f64) -> Self;
+    fn exclude(self) -> Self;
+    fn with_note(self, note: &str) -> Self;
+}
+
+impl ItemExt for Item {
     /// Rescale the item to count `worth` points (a 0–100 report worth 10
     /// points: 85/100 becomes 8.5/10), as the syllabus weights it.
     fn with_worth(mut self, worth: f64) -> Self {
@@ -95,7 +68,11 @@ fn category(name: &str, weight: f64, items: Vec<Item>) -> Category {
     }
 }
 
-impl Category {
+trait CategoryExt {
+    fn drop_lowest(self, n: u32) -> Self;
+}
+
+impl CategoryExt for Category {
     fn drop_lowest(mut self, n: u32) -> Self {
         self.drop_lowest = Some(n.into());
         self
@@ -110,16 +87,6 @@ fn scale(cutoffs: &[(&str, f64)]) -> Vec<Cutoff> {
             min: *min,
         })
         .collect()
-}
-
-pub fn standard_scale() -> Vec<Cutoff> {
-    scale(&[
-        ("A", 90.0),
-        ("B", 80.0),
-        ("C", 70.0),
-        ("D", 60.0),
-        ("F", 0.0),
-    ])
 }
 
 fn course(
@@ -452,7 +419,7 @@ pub fn math218_canvas() -> Course {
         Scheme::Points,
         2,
         math218_scale(),
-        "Mirror of the Canvas gradebook setup: no weights, no drops, and the 0-point Midsemester Score is added as extra points. This reproduces the 118.28% Canvas shows, which is not a real course grade; see the syllabus-weighted Math 218 example for that.",
+        "Mirror of the Canvas gradebook setup: no weights, no drops, and the 0-point Midsemester Score is added as extra points. This reproduces the 118.28% Canvas shows, which is not a real course grade; see the syllabus-weighted Math 218 course for that.",
         vec![
             category("Written Homework group", 0.0, math218_written()),
             category("Assignments", 0.0, vec![]),
@@ -465,59 +432,4 @@ pub fn math218_canvas() -> Course {
             ),
         ],
     )
-}
-
-/// An example course the front-end can load by key.
-pub struct Example {
-    pub key: &'static str,
-    pub label: &'static str,
-    pub build: fn() -> Course,
-}
-
-pub const EXAMPLES: &[Example] = &[
-    Example {
-        key: "cs401",
-        label: "CS 401 – Computer Algorithms",
-        build: cs401,
-    },
-    Example {
-        key: "cs411",
-        label: "CS 411 – Artificial Intelligence",
-        build: cs411,
-    },
-    Example {
-        key: "cs440",
-        label: "CS 440 – Intro to Software Engineering",
-        build: cs440,
-    },
-    Example {
-        key: "math218",
-        label: "Math 218 – Applied Linear Algebra",
-        build: math218,
-    },
-    Example {
-        key: "math218-canvas",
-        label: "Math 218 – as Canvas computes it",
-        build: math218_canvas,
-    },
-];
-
-pub fn example(key: &str) -> Option<Course> {
-    EXAMPLES.iter().find(|e| e.key == key).map(|e| (e.build)())
-}
-
-/// Starting point for a new, empty course.
-pub fn blank_course() -> Course {
-    Course {
-        id: new_id("course"),
-        name: "New course".to_owned(),
-        scheme: Scheme::Weighted,
-        categories: vec![
-            category("Homework", 40.0, vec![u("Homework 1", 10.0)]),
-            category("Exams", 60.0, vec![u("Midterm", 100.0)]),
-        ],
-        scale: standard_scale(),
-        display_decimals: Some(2),
-        ..Default::default()
-    }
 }

@@ -17,21 +17,13 @@ export interface Evaluation {
   needs: { target: number; needed: Needed }[]
 }
 
-/** An example course that `engine.example(key)` can load. */
-export interface ExampleInfo {
-  key: string
-  label: string
-}
-
 /** Fetch and instantiate the .wasm module. */
 export async function loadEngine(): Promise<void> {
   await init()
 }
 
 export const engine = {
-  examples: (): ExampleInfo[] => wasm.examples(),
-  /** A fresh copy of an example course. Throws for an unknown key. */
-  example: (key: string): Course => wasm.example(key),
+  /** A new course to start from, with fresh ids. */
   blankCourse: (): Course => wasm.blankCourse(),
   /** Grade a course and solve "what do I need?" for each target percentage. */
   evaluate: (course: Course, targets: number[]): Evaluation => wasm.evaluate(course, targets),

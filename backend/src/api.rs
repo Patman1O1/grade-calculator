@@ -4,7 +4,6 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::examples::{EXAMPLES, re_id};
 use crate::{Course, Needed};
 
 /// A target percentage and what it takes to reach it.
@@ -66,23 +65,6 @@ pub fn summaries(courses: Vec<Course>) -> Vec<CourseSummary> {
         .collect()
 }
 
-/// An example course the front-end can load by key.
-#[derive(Debug, Serialize)]
-pub struct ExampleInfo {
-    pub key: &'static str,
-    pub label: &'static str,
-}
-
-pub fn examples() -> Vec<ExampleInfo> {
-    EXAMPLES
-        .iter()
-        .map(|e| ExampleInfo {
-            key: e.key,
-            label: e.label,
-        })
-        .collect()
-}
-
 pub const NOT_A_COURSE: &str = "That file is not a course exported from this calculator.";
 
 /// Validate exported JSON (one course or a list of them) and give every
@@ -90,7 +72,10 @@ pub const NOT_A_COURSE: &str = "That file is not a course exported from this cal
 /// aren't courses are skipped; it is an error if none are. Also used to
 /// duplicate a course.
 pub fn import_courses(data: Value) -> Result<Vec<Course>, &'static str> {
-    let courses: Vec<Course> = parse_courses(data).into_iter().map(re_id).collect();
+    let courses: Vec<Course> = parse_courses(data)
+        .into_iter()
+        .map(Course::with_fresh_ids)
+        .collect();
     if courses.is_empty() {
         Err(NOT_A_COURSE)
     } else {
