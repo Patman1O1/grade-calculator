@@ -4,7 +4,7 @@
  * anything else; after that every function is synchronous.
  */
 import init, * as wasm from './wasm/engine.js'
-import type { Course, Needed } from './course'
+import type { Course, CourseSummary, Needed } from './course'
 
 // Engine results (mirror backend/src/api.rs).
 
@@ -15,13 +15,6 @@ export interface Evaluation {
   remaining: number
   /** One entry per requested target, in request order. */
   needs: { target: number; needed: Needed }[]
-}
-
-/** A course's overall grade, for the course picker. */
-export interface CourseSummary {
-  id: string
-  percent: number | null
-  letter: string | null
 }
 
 /** An example course that `engine.example(key)` can load. */

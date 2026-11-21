@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { decimals, exportFileName, targets, updateCourse, type Course, type Mutate } from './course'
+import { decimals, exportFileName, percentsById, targets, updateCourse, type Course, type Mutate } from './course'
 import { engine } from './engine'
 import { formatPercent } from './format'
 import { loadState, saveState, type SavedState } from './storage'
@@ -50,7 +50,7 @@ export default function App() {
   const course = courses.find((c) => c.id === state.selectedId) ?? courses[0] ?? null
   const percents = useMemo(() => {
     try {
-      return new Map(engine.summaries(courses).map((s) => [s.id, s.percent]))
+      return percentsById(engine.summaries(courses))
     } catch {
       return new Map<string, number | null>()
     }

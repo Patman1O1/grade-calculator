@@ -43,6 +43,14 @@ export type Needed =
   | { kind: 'impossible'; best: number | null }
   | { kind: 'needs'; fraction: number }
 
+/** A course's overall grade, for the course picker (from `engine.summaries`). */
+export interface CourseSummary {
+  id: string
+  /** Overall percentage, or null when nothing is graded. */
+  percent: number | null
+  letter: string | null
+}
+
 /** Edit the selected course: `fn` receives a draft copy to change in place. */
 export type Mutate = (fn: (draft: Course) => void) => void
 
@@ -88,6 +96,11 @@ export function updateCourse(courses: Course[], id: string, fn: (draft: Course) 
     fn(draft)
     return draft
   })
+}
+
+/** Each course's overall percentage by course id, for the course picker. */
+export function percentsById(summaries: CourseSummary[]): Map<string, number | null> {
+  return new Map(summaries.map((s) => [s.id, s.percent]))
 }
 
 /** File name for exporting a course as JSON ("CS-411-Artificial-Intelligence.json"). */

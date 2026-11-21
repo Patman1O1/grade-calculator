@@ -25,7 +25,7 @@ flowchart LR
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
     NumberInput["components/NumberInput.tsx"]
-    coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, Mutate"]
+    coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, CourseSummary, Mutate"]
     categoryts["category.ts<br/>Category"]
     itemts["item.ts<br/>Item, Status"]
     enginets["engine.ts<br/>typed wrapper + result types"]
@@ -415,7 +415,7 @@ classDiagram
   direction LR
   class course {
     <<module>>
-    +Course, Scheme, Cutoff, Needed, Mutate
+    +Course, Scheme, Cutoff, Needed, CourseSummary, Mutate
     +decimals(course)$ number
     +letterTargets(course)$ Cutoff[]
     +targets(course, custom)$ number[]
@@ -423,6 +423,7 @@ classDiagram
     +newCutoff()$ Cutoff
     +gradedCategories(graded)$ Map~string, Category~
     +updateCourse(courses, id, fn)$ Course[]
+    +percentsById(summaries)$ Map~string, number or null~
     +exportFileName(course)$ string
     +describeNeed(need)$ string
   }
@@ -446,4 +447,4 @@ classDiagram
   category ..> item : Item, newItem
 ```
 
-`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` also holds the engine's result types (`Evaluation`, `CourseSummary`, `ExampleInfo`), mirroring `api.rs`.
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` also holds the engine's other result types (`Evaluation`, `ExampleInfo`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.
