@@ -35,7 +35,7 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 
 ## Engine interface
 
-[`backend/src/wasm.rs`](backend/src/wasm.rs) exports these functions to JavaScript; [`frontend/src/engine.ts`](frontend/src/engine.ts) wraps them with TypeScript types. They take and return plain objects in the same camelCase JSON shape the app stores and exports (see [`item.rs`](backend/src/item.rs), [`category.rs`](backend/src/category.rs) and [`course.rs`](backend/src/course.rs)). Errors are thrown as JS `Error`s.
+[`backend/src/wasm.rs`](backend/src/wasm.rs) exports these functions to JavaScript; [`frontend/src/engine.ts`](frontend/src/engine.ts) wraps them with TypeScript types. They take and return plain objects in the same camelCase JSON shape the app stores and exports (see [`item/mod.rs`](backend/src/item/mod.rs), [`category/mod.rs`](backend/src/category/mod.rs) and [`course/mod.rs`](backend/src/course/mod.rs)). Errors are thrown as JS `Error`s.
 
 | Function | Returns |
 |---|---|
@@ -64,7 +64,7 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Each letter has a minimum %. |
 
-Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item.rs`](backend/src/item.rs) scales scores, [`category.rs`](backend/src/category.rs) applies drop rules, and [`course.rs`](backend/src/course.rs) combines categories, assigns the letter and solves "what do I need?".
+Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item/mod.rs`](backend/src/item/mod.rs) scales scores, [`category/mod.rs`](backend/src/category/mod.rs) applies drop rules, and [`course/mod.rs`](backend/src/course/mod.rs) combines categories, assigns the letter and solves "what do I need?".
 
 ## Verification against `docs/`
 

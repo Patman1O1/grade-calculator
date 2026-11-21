@@ -1,8 +1,16 @@
-import type { Category, Course, Cutoff, Item, Status } from '../types'
-import { formatNumber, formatPercent, newId } from '../format'
+import { addItem, gradedItems, hasDropRules, newCategory } from '../category'
+import {
+  decimals as decimalsOf,
+  gradedCategories as gradedCategoriesOf,
+  newCutoff,
+  totalWeight as totalWeightOf,
+  type Course,
+  type Cutoff,
+  type Mutate,
+} from '../course'
+import { formatNumber, formatPercent } from '../format'
+import { rowClass, setWorth } from '../item'
 import { NumberInput } from './NumberInput'
-
-export type Mutate = (fn: (draft: Course) => void) => void
 
 interface Props {
   course: Course
@@ -13,21 +21,11 @@ interface Props {
 
 const PENDING = '…'
 
-/** Row style for each item status (see index.css). */
-const ROW_CLASS: Record<Status, string> = {
-  counted: '',
-  dropped: 'dropped',
-  excluded: 'excluded',
-  ungraded: 'pending',
-}
-
 export function CourseEditor({ course, graded, mutate }: Props) {
   const weighted = course.scheme === 'weighted'
-  const decimals = course.displayDecimals ?? 2
-  // Look graded values up by id: while a new evaluation is on its way, the latest
-  // one may be a keystroke behind (e.g. missing an item that was just added).
-  const gradedCategories = new Map<string, Category>(graded?.categories.map((c) => [c.id, c]))
-  const totalWeight = course.categories.reduce((s, c) => s + (c.extraCredit ? 0 : c.weight), 0)
+  const decimals = decimalsOf(course)
+  const gradedCategories = gradedCategoriesOf(graded)
+  const totalWeight = totalWeightOf(course)
 
   return (
     <div className="editor">
@@ -64,8 +62,8 @@ export function CourseEditor({ course, graded, mutate }: Props) {
 
       {course.categories.map((cat, ci) => {
         const gc = gradedCategories.get(cat.id)
-        const gradedItems = new Map<string, Item>(gc?.items.map((i) => [i.id, i]))
-        const hasDrops = (cat.dropLowest ?? 0) > 0 || (cat.dropHighest ?? 0) > 0
+        const gradedItemsById = gradedItems(gc)
+        const hasDrops = hasDropRules(cat)
         return (
           <section className="panel category" key={cat.id}>
             <header className="category-head">
@@ -149,10 +147,10 @@ export function CourseEditor({ course, graded, mutate }: Props) {
               </thead>
               <tbody>
                 {cat.items.map((item, ii) => {
-                  const gi = gradedItems.get(item.id)
+                  const gi = gradedItemsById.get(item.id)
                   const status = gi?.status
                   return (
-                    <tr key={item.id} className={status ? ROW_CLASS[status] : ''}>
+                    <tr key={item.id} className={rowClass(status)}>
                       <td className="name">
                         <input
                           aria-label="Item name"
@@ -187,13 +185,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
                           min={0}
                           placeholder={String(item.outOf)}
                           value={item.worth ?? null}
-                          onChange={(v) =>
-                            mutate((d) => {
-                              const it = d.categories[ci].items[ii]
-                              if (v === null) delete it.worth
-                              else it.worth = v
-                            })
-                          }
+                          onChange={(v) => mutate((d) => setWorth(d.categories[ci].items[ii], v))}
                         />
                       </td>
                       <td className="counts">
@@ -248,19 +240,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
             <button
               type="button"
               className="link"
-              onClick={() =>
-                mutate((d) => {
-                  const items = d.categories[ci].items
-                  const last = items[items.length - 1]
-                  items.push({
-                    id: newId('item'),
-                    name: `${d.categories[ci].name} ${items.length + 1}`,
-                    score: null,
-                    outOf: last?.outOf ?? 10,
-                    ...(last?.worth !== undefined ? { worth: last.worth } : {}),
-                  })
-                })
-              }
+              onClick={() => mutate((d) => addItem(d.categories[ci]))}
             >
               + Add item
             </button>
@@ -271,16 +251,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
       <button
         type="button"
         className="add-category"
-        onClick={() =>
-          mutate((d) =>
-            void d.categories.push({
-              id: newId('cat'),
-              name: 'New category',
-              weight: 0,
-              items: [],
-            }),
-          )
-        }
+        onClick={() => mutate((d) => void d.categories.push(newCategory()))}
       >
         + Add category
       </button>
@@ -341,7 +312,7 @@ function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
       <button
         type="button"
         className="link"
-        onClick={() => mutate((d) => void d.scale.push({ letter: '?', min: 0 }))}
+        onClick={() => mutate((d) => void d.scale.push(newCutoff()))}
       >
         + Add letter
       </button>

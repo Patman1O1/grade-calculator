@@ -1,19 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { decimals, exportFileName, percentsById, targets, updateCourse, type Course, type Mutate } from './course'
 import { engine } from './engine'
 import { formatPercent } from './format'
-import type { Course } from './types'
 import { loadState, saveState, type SavedState } from './storage'
-import { CourseEditor, type Mutate } from './components/CourseEditor'
+import { CourseEditor } from './components/CourseEditor'
 import { Summary } from './components/Summary'
-
-/** Letter targets (highest first) followed by the user's custom target, if any. */
-function targetsFor(course: Course, custom: number | null): number[] {
-  const letters = course.scale
-    .map((c) => c.min)
-    .filter((m) => m > 0)
-    .sort((a, b) => b - a)
-  return custom === null ? letters : [...letters, custom]
-}
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -22,7 +13,7 @@ function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
   const [custom, setCustom] = useState<number | null>(null)
   const evaluation = useMemo(() => {
     try {
-      return { data: engine.evaluate(course, targetsFor(course, custom)), error: null }
+      return { data: engine.evaluate(course, targets(course, custom)), error: null }
     } catch (e) {
       return { data: null, error: message(e) }
     }
@@ -59,7 +50,7 @@ export default function App() {
   const course = courses.find((c) => c.id === state.selectedId) ?? courses[0] ?? null
   const percents = useMemo(() => {
     try {
-      return new Map(engine.summaries(courses).map((s) => [s.id, s.percent]))
+      return percentsById(engine.summaries(courses))
     } catch {
       return new Map<string, number | null>()
     }
@@ -71,16 +62,9 @@ export default function App() {
     setState((s) => ({ courses: [...s.courses, ...added], selectedId: added[0].id }))
   }
 
-  const mutate: Mutate = (fn) =>
-    setState((s) => ({
-      ...s,
-      courses: s.courses.map((c) => {
-        if (c.id !== course?.id) return c
-        const draft = structuredClone(c)
-        fn(draft)
-        return draft
-      }),
-    }))
+  const mutate: Mutate = (fn) => {
+    if (course) setState((s) => ({ ...s, courses: updateCourse(s.courses, course.id, fn) }))
+  }
 
   const removeCourse = () => {
     if (!course || !window.confirm(`Delete “${course.name}”?`)) return
@@ -101,7 +85,7 @@ export default function App() {
     const blob = new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `${course.name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'course'}.json`
+    a.download = exportFileName(course)
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -127,7 +111,7 @@ export default function App() {
           >
             {courses.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} — {formatPercent(percents.get(c.id), c.displayDecimals ?? 2)}
+                {c.name} — {formatPercent(percents.get(c.id), decimals(c))}
               </option>
             ))}
           </select>

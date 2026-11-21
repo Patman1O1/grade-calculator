@@ -1,4 +1,5 @@
-import type { Course, Evaluation, Needed } from '../types'
+import { decimals as decimalsOf, describeNeed, letterTargets, type Course } from '../course'
+import type { Evaluation } from '../engine'
 import { formatNumber, formatPercent, round } from '../format'
 import { NumberInput } from './NumberInput'
 
@@ -10,24 +11,10 @@ interface Props {
   onCustom: (value: number | null) => void
 }
 
-function describeNeed(need: Needed | undefined): string {
-  if (!need) return '…'
-  switch (need.kind) {
-    case 'no-remaining':
-      return 'nothing left to grade'
-    case 'secured':
-      return 'secured'
-    case 'impossible':
-      return need.best === null ? 'out of reach' : `out of reach (max ${formatPercent(need.best, 2)})`
-    case 'needs':
-      return `${round(need.fraction * 100, 1)}% avg`
-  }
-}
-
 export function Summary({ course, evaluation, custom, onCustom }: Props) {
-  const decimals = course.displayDecimals ?? 2
+  const decimals = decimalsOf(course)
   const weighted = course.scheme === 'weighted'
-  const targets = [...course.scale].filter((c) => c.min > 0).sort((a, b) => b.min - a.min)
+  const targets = letterTargets(course)
 
   if (!evaluation) {
     return (

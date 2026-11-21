@@ -4,7 +4,24 @@
  * anything else; after that every function is synchronous.
  */
 import init, * as wasm from './wasm/engine.js'
-import type { Course, CourseSummary, Evaluation, ExampleInfo } from './types'
+import type { Course, CourseSummary, Needed } from './course'
+
+// Engine results (mirror backend/src/api.rs).
+
+export interface Evaluation {
+  /** The course with its computed fields filled in. */
+  course: Course
+  /** Ungraded items that still have points available. */
+  remaining: number
+  /** One entry per requested target, in request order. */
+  needs: { target: number; needed: Needed }[]
+}
+
+/** An example course that `engine.example(key)` can load. */
+export interface ExampleInfo {
+  key: string
+  label: string
+}
 
 /** Fetch and instantiate the .wasm module. */
 export async function loadEngine(): Promise<void> {
