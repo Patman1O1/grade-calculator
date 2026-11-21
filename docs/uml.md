@@ -25,7 +25,10 @@ flowchart LR
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
     NumberInput["components/NumberInput.tsx"]
-    enginets["engine.ts<br/>typed wrapper"]
+    coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, Mutate"]
+    categoryts["category.ts<br/>Category"]
+    itemts["item.ts<br/>Item, Status"]
+    enginets["engine.ts<br/>typed wrapper + result types"]
     glue["wasm/engine.js<br/>generated glue"]
     storage["storage.ts<br/>localStorage"]
     format["format.ts"]
@@ -48,6 +51,12 @@ flowchart LR
   Summary --> NumberInput
   CourseEditor --> format
   Summary --> format
+  App --> coursets
+  CourseEditor --> coursets
+  CourseEditor --> categoryts
+  CourseEditor --> itemts
+  Summary --> coursets
+  coursets --> categoryts --> itemts
   glue -->|"calls (JS objects via serde-wasm-bindgen)"| wasm
   wasm --> api
   wasm --> examples
@@ -58,7 +67,7 @@ flowchart LR
   category -->|grades| item
 ```
 
-## 2. Domain model and grading (`backend/src/item/mod.rs`, `category/mod.rs`, `course/mod.rs`; mirrored in `frontend/src/types.ts`)
+## 2. Domain model and grading (`backend/src/item/mod.rs`, `category/mod.rs`, `course/mod.rs`; mirrored in `frontend/src/item.ts`, `category.ts`, `course.ts`)
 
 A `Course` owns its categories and letter scale, and each `Category` owns its items. Each type lives in its own module together with the logic that grades it, and the grade lives on the same types: the fields marked `/` are filled in by `grade()`. `Course::grade` grades each category, and `Category::grade` grades each item and then applies its drop rules.
 
@@ -391,6 +400,50 @@ classDiagram
   Summary *-- NumberInput : custom target
   App ..> engine
   CourseView ..> engine
+  App ..> course
+  CourseView ..> course
+  CourseEditor ..> course
+  CourseEditor ..> category
+  CourseEditor ..> item
+  Summary ..> course
 ```
 
-`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` is `(fn: (draft: Course) => void) => void`: `App` clones the selected course, lets `fn` edit the draft, and stores the result.
+The model and its front-end logic mirror the Rust modules: one file per type, holding the interface and the functions that work on it. All grading happens in the engine; these helpers only build, edit and display courses.
+
+```mermaid
+classDiagram
+  direction LR
+  class course {
+    <<module>>
+    +Course, Scheme, Cutoff, Needed, Mutate
+    +decimals(course)$ number
+    +letterTargets(course)$ Cutoff[]
+    +targets(course, custom)$ number[]
+    +totalWeight(course)$ number
+    +newCutoff()$ Cutoff
+    +gradedCategories(graded)$ Map~string, Category~
+    +updateCourse(courses, id, fn)$ Course[]
+    +exportFileName(course)$ string
+    +describeNeed(need)$ string
+  }
+  class category {
+    <<module>>
+    +Category
+    +newCategory()$ Category
+    +addItem(category)$ void
+    +hasDropRules(category)$ boolean
+    +gradedItems(graded)$ Map~string, Item~
+  }
+  class item {
+    <<module>>
+    +Item, Status
+    -ROW_CLASS: Record~Status, string~$
+    +rowClass(status)$ string
+    +newItem(name, previous)$ Item
+    +setWorth(item, worth)$ void
+  }
+  course ..> category : Category
+  category ..> item : Item, newItem
+```
+
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` also holds the engine's result types (`Evaluation`, `CourseSummary`, `ExampleInfo`), mirroring `api.rs`.
