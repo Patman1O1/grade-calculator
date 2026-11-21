@@ -24,7 +24,6 @@ flowchart LR
     App["App.tsx"]
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
-    GradeInput["components/GradeInput.tsx"]
     NumberInput["components/NumberInput.tsx"]
     coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, CourseSummary, Mutate"]
     categoryts["category.ts<br/>Category"]
@@ -48,7 +47,6 @@ flowchart LR
   App --> storage
   App -->|renders| CourseEditor
   App -->|renders| Summary
-  CourseEditor --> GradeInput --> NumberInput
   CourseEditor --> NumberInput
   Summary --> NumberInput
   CourseEditor --> format
@@ -378,14 +376,6 @@ classDiagram
     +custom: number or null
     +onCustom(value) void
   }
-  class GradeInput {
-    <<component>>
-    +item: Item
-    +onPercent(percent) void
-    +onPoints(earned, possible) void
-    +onSwitchToPercent() void
-    -mode: GradeMode
-  }
   class NumberInput {
     <<component>>
     -text: string
@@ -406,8 +396,6 @@ classDiagram
   CourseView *-- CourseEditor
   CourseView *-- Summary
   CourseEditor *-- ScaleEditor
-  CourseEditor *-- "0..*" GradeInput : Grade column
-  GradeInput *-- "1..2" NumberInput
   CourseEditor *-- "0..*" NumberInput
   ScaleEditor *-- "0..*" NumberInput
   Summary *-- NumberInput : custom target
@@ -453,11 +441,7 @@ classDiagram
     +Item, Status
     -ROW_CLASS: Record~Status, string~$
     +rowClass(status)$ string
-    +GradeMode
-    +defaultGradeMode(item)$ GradeMode
     +percentOf(item)$ number or null
-    +setPercent(item, percent)$ void
-    +toPercent(item)$ void
     +newItem(name, previous)$ Item
   }
   course ..> category : Category

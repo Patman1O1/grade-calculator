@@ -9,8 +9,7 @@ import {
   type Mutate,
 } from '../course'
 import { formatNumber, formatPercent } from '../format'
-import { percentOf, rowClass, setPercent, toPercent } from '../item'
-import { GradeInput } from './GradeInput'
+import { percentOf, rowClass } from '../item'
 import { NumberInput } from './NumberInput'
 
 interface Props {
@@ -137,11 +136,9 @@ export function CourseEditor({ course, graded, mutate }: Props) {
               <thead>
                 <tr>
                   <th className="name">Item</th>
-                  <th
-                    className="grade"
-                    title="Enter a score in %, or points earned / possible. An item's points set how much it counts in the category; a score in % counts as 100 points."
-                  >
-                    Grade
+                  <th title="Points earned on this item. Leave blank if it hasn't been graded yet.">Earned Points</th>
+                  <th title="Points the item is out of. This also sets how much it counts in its category; 0 makes it extra credit.">
+                    Total Points
                   </th>
                   <th title="The item's percentage, or why it doesn't count">Counts</th>
                   <th title="Excluded from the grade">Excl.</th>
@@ -163,18 +160,23 @@ export function CourseEditor({ course, graded, mutate }: Props) {
                         />
                         {item.note && <small className="note">{item.note}</small>}
                       </td>
-                      <td className="grade">
-                        <GradeInput
-                          item={item}
-                          onPercent={(v) => mutate((d) => setPercent(d.categories[ci].items[ii], v))}
-                          onPoints={(earned, possible) =>
-                            mutate((d) => {
-                              const it = d.categories[ci].items[ii]
-                              it.earned = earned
-                              it.possible = possible
-                            })
-                          }
-                          onSwitchToPercent={() => mutate((d) => toPercent(d.categories[ci].items[ii]))}
+                      <td>
+                        <NumberInput
+                          aria-label={`${item.name} earned points`}
+                          className="num"
+                          placeholder="–"
+                          value={item.earned}
+                          onChange={(v) => mutate((d) => void (d.categories[ci].items[ii].earned = v))}
+                        />
+                      </td>
+                      <td>
+                        <NumberInput
+                          aria-label={`${item.name} total points`}
+                          className="num"
+                          nullable={false}
+                          min={0}
+                          value={item.possible}
+                          onChange={(v) => mutate((d) => void (d.categories[ci].items[ii].possible = v ?? 0))}
                         />
                       </td>
                       <td className="counts">

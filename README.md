@@ -60,8 +60,8 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 | Concept | Meaning |
 |---|---|
 | **Item** | `earned` out of `possible` points. A blank `earned` means the item is not graded yet and is ignored. `possible = 0` makes the item pure extra credit. |
-| **Grade entry** | Each item's **Grade** has a dropdown: **Score (%)** takes one percentage and stores it as that many points out of 100; **Points** takes earned / possible directly. An item opens as Score (%) when it is out of 100, and as Points otherwise. |
-| **Points set weight** | Within a category, items count in proportion to their points possible: a 10-point quiz counts a tenth as much as a 100-point exam. So a score entered in % counts as 100 points. To make a 0–100 report count 10 points, enter it as Points (85/100 → 8.5 / 10). |
+| **Earned / Total Points** | Each item has two fields next to its name: **Earned Points** (leave blank until it's graded) and **Total Points**. To enter a percentage, use a total of 100. |
+| **Points set weight** | Within a category, items count in proportion to their total points: a 10-point quiz counts a tenth as much as a 100-point exam. To make a 0–100 report count 10 points, enter it scaled (85/100 → 8.5 / 10). |
 | **Excluded** | The item is shown but does not count (for example Canvas "does not count toward final grade" items, or sub-scores). |
 | **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. Items marked *Keep* are never dropped. |
 | **Total points** | Course % = sum of earned / sum of possible over all categories. |

@@ -4,10 +4,9 @@
  * the two in sync.
  *
  * An item's points also set how much it counts in its category: a 10-point
- * quiz counts a tenth as much as a 100-point exam. A score entered as a
- * percentage is stored as `percent / 100`. `status` is computed by the engine
- * (`engine.evaluate`); it is absent on the items the browser stores and
- * exports, and the engine ignores it on input.
+ * quiz counts a tenth as much as a 100-point exam. `status` is computed by
+ * the engine (`engine.evaluate`); it is absent on the items the browser
+ * stores and exports, and the engine ignores it on input.
  */
 import { newId, round } from './format'
 
@@ -40,30 +39,10 @@ export interface Item {
   status?: Status
 }
 
-/** How the grade is entered: one percentage (stored as x/100) or points earned / possible. */
-export type GradeMode = 'percent' | 'points'
-
-/** The input an item opens with: a percentage if it is out of 100, points otherwise. */
-export function defaultGradeMode(item: Item): GradeMode {
-  return item.possible === 100 ? 'percent' : 'points'
-}
-
 /** `earned / possible` as a percentage; null if ungraded or extra credit (0 possible). */
 export function percentOf(item: Item): number | null {
   if (item.earned === null || item.possible <= 0) return null
-  // Out of 100, the earned points are the percentage; avoid float noise like 85.00000000000001.
-  return item.possible === 100 ? item.earned : round((item.earned / item.possible) * 100, 6)
-}
-
-/** Grade entered as a percentage: stored as `percent` out of 100 points. */
-export function setPercent(item: Item, percent: number | null): void {
-  item.earned = percent
-  item.possible = 100
-}
-
-/** Switch an item to percentage entry, keeping its score: 8/10 becomes 80/100. */
-export function toPercent(item: Item): void {
-  setPercent(item, item.possible > 0 ? percentOf(item) : item.earned)
+  return round((item.earned / item.possible) * 100, 6)
 }
 
 /** Table-row class for each status (see index.css). */
@@ -82,7 +61,7 @@ export function rowClass(status: Status | undefined): string {
 /**
  * A new, ungraded item named `name`. It copies `possible` from `previous`
  * (the category's last item) so a run of similar items is quick to enter;
- * the first item in a category is out of 100, i.e. a percentage.
+ * the first item in a category is out of 100.
  */
 export function newItem(name: string, previous?: Item): Item {
   return { id: newId('item'), name, earned: null, possible: previous?.possible ?? 100 }

@@ -322,55 +322,6 @@ input.num {
   text-align: right;
 }
 
-/* Grade cell: entry-type dropdown + a % field or earned / possible fields. */
-.grade-input {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.grade-input select {
-  font-size: 0.8rem;
-  padding: 3px 4px;
-}
-
-.grade-input input.num {
-  width: 64px;
-}
-
-/* The % entry is emphasised: accent border and a bold % sign inside the box. */
-.percent-field {
-  display: inline-flex;
-  align-items: center;
-  border: 1.5px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent-soft);
-  padding-right: 8px;
-}
-
-.percent-field input.num {
-  border: none !important;
-  background: transparent;
-  font-weight: 600;
-}
-
-.percent-field .unit {
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--accent);
-}
-
-.points-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.points-field .sep {
-  color: var(--muted);
-}
-
 td.counts {
   white-space: nowrap;
   font-size: 0.85rem;
