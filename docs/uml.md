@@ -383,7 +383,6 @@ classDiagram
     +letterTargets(course)$ Cutoff[]
     +targets(course, custom)$ number[]
     +totalWeight(course)$ number
-    +newCutoff()$ Cutoff
     +EngineCourse
     +withIds(course, saved?)$ Course
     +updateCourse(courses, id, fn)$ Course[]

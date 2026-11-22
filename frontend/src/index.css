@@ -497,3 +497,9 @@ table.needs input.num {
   color: var(--danger);
   background: var(--panel);
 }
+
+/* Letter grades in the scale are fixed labels; only the cutoffs are editable. */
+.letter-label {
+  font-weight: 600;
+  padding-left: 4px;
+}

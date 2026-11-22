@@ -1,7 +1,6 @@
 import { addItem, hasDropRules, newCategory } from '../category'
 import {
   decimals as decimalsOf,
-  newCutoff,
   totalWeight as totalWeightOf,
   type Course,
   type EngineCourse,
@@ -257,6 +256,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
   )
 }
 
+/** The letter grades are fixed; only each letter's minimum % can be changed. */
 function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
   const rows: Cutoff[] = course.scale
   return (
@@ -269,18 +269,13 @@ function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
           <tr>
             <th className="name">Letter</th>
             <th>Minimum %</th>
-            <th aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={i}>
               <td className="name">
-                <input
-                  aria-label="Letter"
-                  value={row.letter}
-                  onChange={(e) => mutate((d) => void (d.scale[i].letter = e.target.value))}
-                />
+                <span className="letter-label">{row.letter}</span>
               </td>
               <td>
                 <NumberInput
@@ -291,27 +286,10 @@ function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
                   onChange={(v) => mutate((d) => void (d.scale[i].min = v ?? 0))}
                 />
               </td>
-              <td>
-                <button
-                  type="button"
-                  className="icon danger"
-                  aria-label={`Delete ${row.letter}`}
-                  onClick={() => mutate((d) => void d.scale.splice(i, 1))}
-                >
-                  ✕
-                </button>
-              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button
-        type="button"
-        className="link"
-        onClick={() => mutate((d) => void d.scale.push(newCutoff()))}
-      >
-        + Add letter
-      </button>
     </section>
   )
 }

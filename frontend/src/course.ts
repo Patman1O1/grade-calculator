@@ -90,11 +90,6 @@ export function totalWeight(course: Course): number {
   return course.categories.reduce((sum, c) => sum + (c.extraCredit ? 0 : c.weight), 0)
 }
 
-/** A new letter-scale row. */
-export function newCutoff(): Cutoff {
-  return { letter: '?', min: 0 }
-}
-
 /** Return `courses` with the course `id` replaced by an edited copy (`fn` edits a draft). */
 export function updateCourse(courses: Course[], id: string, fn: (draft: Course) => void): Course[] {
   return courses.map((c) => {
