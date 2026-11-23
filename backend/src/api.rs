@@ -4,7 +4,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::course::{Course, Needed};
+use crate::course::{self, Course, Needed};
 
 /// A target percentage and what it takes to reach it.
 #[derive(Debug, Serialize)]
@@ -84,13 +84,27 @@ pub fn normalize_courses(data: Value) -> Vec<Option<Course>> {
     parse_courses(data)
 }
 
-/// Each entry of `data` (one course or a list) as a course, or `None` if it isn't one.
+/// Each entry of `data` (one course or a list) as a course, or `None` if it
+/// isn't one. Older JSON forms are upgraded first, and each item's status is
+/// recomputed from its score, so only an `"excluded"` status is taken from
+/// the input.
 fn parse_courses(data: Value) -> Vec<Option<Course>> {
     let list = match data {
         Value::Array(list) => list,
         other => vec![other],
     };
     list.into_iter()
-        .map(|v| serde_json::from_value::<Course>(v).ok())
+        .map(|mut v| {
+            course::upgrade_json(&mut v);
+            let mut course = serde_json::from_value::<Course>(v).ok()?;
+            for item in course
+                .categories
+                .iter_mut()
+                .flat_map(|c| c.items.iter_mut())
+            {
+                item.grade();
+            }
+            Some(course)
+        })
         .collect()
 }

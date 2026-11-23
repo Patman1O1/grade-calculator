@@ -4,7 +4,9 @@ use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::item::Item;
+use serde_json::Value;
+
+use crate::item::{self, Item};
 use crate::utils::is_false;
 
 /// A group of items (homework, exams, …). It may drop the lowest/highest
@@ -34,6 +36,14 @@ pub struct Category {
     /// earned / possible as a percentage; stays `None` when nothing is graded.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub percent: Option<f64>,
+}
+
+/// Rewrite a category's JSON from older forms to the current one, in place
+/// (see [`item::upgrade_json`]).
+pub fn upgrade_json(category: &mut Value) {
+    if let Some(items) = category.get_mut("items").and_then(Value::as_array_mut) {
+        items.iter_mut().for_each(item::upgrade_json);
+    }
 }
 
 impl Category {

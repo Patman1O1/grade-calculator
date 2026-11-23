@@ -12,8 +12,13 @@ fn item(earned: Option<f64>, possible: f64) -> Item {
     }
 }
 
-fn parse(v: serde_json::Value) -> Item {
-    serde_json::from_value(v).unwrap()
+/// Read an item the way courses come in (import, saved courses): upgrade
+/// older JSON, deserialise, then grade, which recomputes the status.
+fn parse(mut v: serde_json::Value) -> Item {
+    upgrade_json(&mut v);
+    let mut item: Item = serde_json::from_value(v).unwrap();
+    item.grade();
+    item
 }
 
 #[test]
@@ -121,4 +126,37 @@ fn converts_the_older_score_out_of_worth_form() {
 #[test]
 fn rejects_items_without_points_possible() {
     assert!(serde_json::from_value::<Item>(json!({ "name": "?", "earned": 5 })).is_err());
+}
+
+#[test]
+fn upgrade_json_leaves_the_current_form_alone() {
+    let current = json!({ "name": "Q", "earned": 3, "possible": 10, "status": "excluded", "neverDrop": true });
+    let mut v = current.clone();
+    upgrade_json(&mut v);
+    assert_eq!(v, current);
+    // Not an object: nothing to do.
+    let mut v = json!(5);
+    upgrade_json(&mut v);
+    assert_eq!(v, json!(5));
+}
+
+#[test]
+fn upgrade_json_rewrites_the_older_form() {
+    let mut v = json!({ "name": "R", "score": 85, "outOf": 100, "worth": 10, "excluded": true, "note": "n" });
+    upgrade_json(&mut v);
+    assert_eq!(
+        v,
+        json!({ "name": "R", "earned": 85.0 / 100.0 * 10.0, "possible": 10.0, "status": "excluded", "note": "n" })
+    );
+}
+
+#[test]
+fn a_missing_status_defaults_to_ungraded_until_graded() {
+    let i: Item =
+        serde_json::from_value(json!({ "name": "Q", "earned": 3, "possible": 10 })).unwrap();
+    assert_eq!(i.status, Status::Ungraded);
+    assert_eq!(
+        parse(json!({ "name": "Q", "earned": 3, "possible": 10 })).status,
+        Status::Counted
+    );
 }

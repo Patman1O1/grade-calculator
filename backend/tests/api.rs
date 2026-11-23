@@ -146,7 +146,7 @@ fn computed_fields_in_input_are_recomputed() {
                 { "name": "J", "earned": 5, "possible": 10, "status": "excluded" }
             ] }] });
 
-    let imported = import_courses(forged.clone()).unwrap();
+    let imported = import_courses(forged).unwrap();
     assert_eq!(imported[0].percent, None);
     assert_eq!(imported[0].categories[0].earned, None);
     // In the older score/outOf form, `earned` comes from the score, not the forged value.
@@ -154,8 +154,7 @@ fn computed_fields_in_input_are_recomputed() {
     assert_eq!(imported[0].categories[0].items[0].status, Status::Counted);
     assert_eq!(imported[0].categories[0].items[1].status, Status::Excluded);
 
-    let course: Course = serde_json::from_value(forged).unwrap();
-    let graded = evaluate(&course, &[]).course;
+    let graded = evaluate(&imported[0], &[]).course;
     assert_eq!(graded.percent, Some(0.0));
     assert_eq!(graded.letter, None);
     assert_eq!(graded.categories[0].items[0].earned, Some(0.0));

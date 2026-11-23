@@ -120,6 +120,7 @@ classDiagram
     +neverDrop: bool
     +note?: String
     +status: Status
+    +upgrade_json(item: &mut Value)$
     +is_excluded(&self) bool
     +is_remaining(&self) bool
     +percent(&self) Option~f64~
@@ -152,7 +153,7 @@ classDiagram
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
-- An item is `earned` out of `possible` points; those points are also how much it counts in its category. Deserialising goes through a private `RawItem` (`#[serde(try_from)]`) that also accepts the older `score` / `outOf` / `worth` form and converts it as the old engine scored it (`score / outOf × worth` out of `worth`), so saved courses and old exports still load.
+- An item is `earned` out of `possible` points; those points are also how much it counts in its category. `Item` uses serde's derived `Deserialize`. Courses that come in from outside (import, saved courses) first go through `course::upgrade_json`, which walks to each category's and item's `upgrade_json` and rewrites the older `score` / `outOf` / `worth` / `excluded` JSON into the current form, converting points exactly as the old engine scored them (`score / outOf × worth` out of `worth`). `api::parse_courses` then grades each item's status, so only an `"excluded"` status is taken from the input.
 - `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`, and older data's `excluded: true` becomes `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - Each of `item/`, `category/`, `course/`, `status/` and `utils/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).

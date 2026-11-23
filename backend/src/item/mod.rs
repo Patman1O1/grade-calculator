@@ -1,6 +1,7 @@
 //! [`Item`]: one graded thing (a quiz, an exam, a lab).
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 use crate::status::Status;
 use crate::utils::is_false;
@@ -11,92 +12,61 @@ use crate::utils::is_false;
 /// much it counts there: a 10-point quiz counts a tenth as much as a 100-point
 /// exam.
 ///
-/// Deserialising also accepts the older `score` / `outOf` / `worth` /
-/// `excluded` form and converts it (see `RawItem`), so saved courses and old
-/// exports still load.
+/// JSON in an older form (`score` / `outOf` / `worth` / `excluded`) is
+/// rewritten to this one by [`upgrade_json`] before it is deserialised.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", try_from = "RawItem")]
+#[serde(rename_all = "camelCase")]
 pub struct Item {
     pub name: String,
     /// Points earned, or `None` when the item has not been graded yet.
+    #[serde(default)]
     pub earned: Option<f64>,
     /// Points possible. 0 makes the item pure extra credit: its `earned`
     /// points are added on top of the category.
     pub possible: f64,
     /// Never removed by drop-lowest / drop-highest rules.
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub never_drop: bool,
     /// Free-form note shown in the UI (e.g. due date).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Whether the item counts toward its category's grade, and if not, why
-    /// not. `Excluded` is the user's choice and is kept; grading recomputes
-    /// the other three from the score and the category's drop rules.
+    /// not. `Excluded` is the user's choice and is kept; [`Item::grade`]
+    /// recomputes the other three from the score (and the category's drop
+    /// rules then set `Dropped`), so a status read from input is never
+    /// trusted except `Excluded`.
+    #[serde(default)]
     pub status: Status,
 }
 
-/// What an item looks like in JSON: the current `earned` / `possible` /
-/// `status` form, or the older `score` / `outOf` / `worth` / `excluded` form.
-/// Of `status`, only `"excluded"` is taken from the input; the rest is
-/// recomputed from the score.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawItem {
-    name: String,
-    #[serde(default)]
-    earned: Option<f64>,
-    #[serde(default)]
-    possible: Option<f64>,
-    /// Older form: raw score out of `outOf`, optionally rescaled to `worth`.
-    #[serde(default)]
-    score: Option<f64>,
-    #[serde(default)]
-    out_of: Option<f64>,
-    #[serde(default)]
-    worth: Option<f64>,
-    #[serde(default)]
-    status: Option<Status>,
-    /// Older form of `status: "excluded"`.
-    #[serde(default)]
-    excluded: bool,
-    #[serde(default)]
-    never_drop: bool,
-    #[serde(default)]
-    note: Option<String>,
-}
-
-impl TryFrom<RawItem> for Item {
-    type Error = String;
-
-    fn try_from(raw: RawItem) -> Result<Self, Self::Error> {
-        let (earned, possible) = match (raw.out_of, raw.possible) {
-            // Older form. Converts exactly as the old engine scored it:
-            // score / outOf * worth, out of worth (raw score for extra credit).
-            (Some(out_of), _) => {
-                let worth = raw.worth.unwrap_or(out_of);
-                if out_of > 0.0 {
-                    (raw.score.map(|s| s / out_of * worth), worth)
-                } else {
-                    (raw.score, 0.0)
-                }
-            }
-            (None, Some(possible)) => (raw.earned, possible),
-            (None, None) => return Err(format!("item {:?} has no points possible", raw.name)),
-        };
-        let excluded = raw.excluded || raw.status == Some(Status::Excluded);
-        let status = if excluded {
-            Status::Excluded
+/// Rewrite an item's JSON from the older `score` / `outOf` / `worth` /
+/// `excluded` form to the current `earned` / `possible` / `status` form, in
+/// place. JSON already in the current form is left alone.
+///
+/// The points convert exactly as the old engine scored them: `score / outOf
+/// * worth` out of `worth` (`worth` defaults to `outOf`), or the raw score
+/// on top for zero-point extra credit. `excluded: true` becomes
+/// `status: "excluded"`.
+pub fn upgrade_json(item: &mut Value) {
+    let Some(item) = item.as_object_mut() else {
+        return;
+    };
+    if let Some(out_of) = item.remove("outOf").and_then(|v| v.as_f64()) {
+        let score = item.remove("score").and_then(|v| v.as_f64());
+        let worth = item
+            .remove("worth")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(out_of);
+        let (earned, possible) = if out_of > 0.0 {
+            (score.map(|s| s / out_of * worth), worth)
         } else {
-            Status::Ungraded
+            (score, 0.0)
         };
-        Ok(Item {
-            name: raw.name,
-            earned,
-            possible,
-            never_drop: raw.never_drop,
-            note: raw.note,
-            status: status.for_score(earned),
-        })
+        item.insert("earned".into(), json!(earned));
+        item.insert("possible".into(), json!(possible));
+    }
+    if item.remove("excluded").and_then(|v| v.as_bool()) == Some(true) {
+        item.insert("status".into(), json!("excluded"));
     }
 }
 
