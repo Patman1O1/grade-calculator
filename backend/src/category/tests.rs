@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (`category/mod.rs`).
 
 use super::*;
-use crate::item::Status;
+use crate::status::Status;
 use crate::utils::round;
 
 fn item(earned: Option<f64>, possible: f64) -> Item {
@@ -26,7 +26,7 @@ fn graded(items: Vec<Item>, drop_lowest: f64, drop_highest: f64) -> Category {
 fn dropped(c: &Category) -> Vec<bool> {
     c.items
         .iter()
-        .map(|i| i.status == Some(Status::Dropped))
+        .map(|i| i.status == Status::Dropped)
         .collect()
 }
 
@@ -75,7 +75,7 @@ fn never_drops_never_drop_items_and_always_keeps_one() {
 #[test]
 fn ignores_ungraded_and_excluded_items_when_dropping() {
     let mut excluded = item(Some(1.0), 10.0);
-    excluded.excluded = true;
+    excluded.status = Status::Excluded;
     let c = graded(
         vec![
             item(None, 10.0),
@@ -87,7 +87,7 @@ fn ignores_ungraded_and_excluded_items_when_dropping() {
         0.0,
     );
     assert_eq!(c.percent, Some(80.0));
-    let statuses: Vec<_> = c.items.iter().map(|i| i.status.unwrap()).collect();
+    let statuses: Vec<_> = c.items.iter().map(|i| i.status).collect();
     assert_eq!(
         statuses,
         [

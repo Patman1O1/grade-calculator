@@ -9,6 +9,7 @@ use grade_calculator::category::Category;
 use grade_calculator::course::standard_scale;
 use grade_calculator::course::{Course, Cutoff, Scheme};
 use grade_calculator::item::Item;
+use grade_calculator::status::Status;
 
 /// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
@@ -48,7 +49,7 @@ impl ItemExt for Item {
         self
     }
     fn exclude(mut self) -> Self {
-        self.excluded = true;
+        self.status = Status::Excluded;
         self
     }
     fn with_note(mut self, note: &str) -> Self {

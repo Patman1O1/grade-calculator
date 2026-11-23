@@ -5,7 +5,7 @@ mod fixtures;
 
 use fixtures::{cs401, cs411, cs440, math218, math218_canvas};
 use grade_calculator::course::Course;
-use grade_calculator::item::Status;
+use grade_calculator::status::Status;
 use grade_calculator::utils::round;
 
 /// `(percent, earned, possible)` of a category, rounded to 2 places.
@@ -60,7 +60,7 @@ fn cs411_canvas_weighted_drop_lowest_two() {
         .categories
         .iter()
         .flat_map(|c| &c.items)
-        .filter(|i| i.status == Some(Status::Dropped))
+        .filter(|i| i.status == Status::Dropped)
         .map(|i| i.name.as_str())
         .collect();
     dropped.sort();

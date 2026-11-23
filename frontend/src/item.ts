@@ -4,22 +4,12 @@
  * the two in sync.
  *
  * An item's points also set how much it counts in its category: a 10-point
- * quiz counts a tenth as much as a 100-point exam. `status` is computed by
- * the engine (`engine.evaluate`); it is absent on the items the browser
- * stores and exports, and the engine ignores it on input.
+ * quiz counts a tenth as much as a 100-point exam. Its `status` is stored;
+ * only 'excluded' is read by the engine, which recomputes the rest (see
+ * status.ts).
  */
 import { newId, round } from './format'
-
-/** Whether an item counts toward its category's grade, and if not, why not. */
-export type Status =
-  /** Graded and part of the category's grade. */
-  | 'counted'
-  /** Graded, but removed by a drop-lowest / drop-highest rule. */
-  | 'dropped'
-  /** Marked as not counting toward the grade. */
-  | 'excluded'
-  /** No score yet. */
-  | 'ungraded'
+import { forScore, type Status } from './status'
 
 export interface Item {
   id: string
@@ -28,15 +18,15 @@ export interface Item {
   earned: number | null
   /** Points possible. 0 makes the item pure extra credit. */
   possible: number
-  /** Not counted toward the grade at all (Canvas "does not count toward final grade"). */
-  excluded?: boolean
   /** Never removed by drop-lowest / drop-highest rules. */
   neverDrop?: boolean
   /** Free-form note shown in the UI (e.g. due date). */
   note?: string
-
-  /** Computed: whether the item counts toward its category's grade, and if not, why not. */
-  status?: Status
+  /**
+   * Whether the item counts toward its category's grade, and if not, why not.
+   * 'excluded' is the user's choice; the engine recomputes the rest.
+   */
+  status: Status
 }
 
 /** `earned / possible` as a percentage; null if ungraded or extra credit (0 possible). */
@@ -53,17 +43,15 @@ export function withItemId(item: EngineItem, id: string = newId('item')): Item {
   return { id, ...item }
 }
 
-/** Table-row class for each status (see index.css). */
-const ROW_CLASS: Record<Status, string> = {
-  counted: '',
-  dropped: 'dropped',
-  excluded: 'excluded',
-  ungraded: 'pending',
+/** Set an item's score, keeping its stored status in step ('counted' / 'ungraded'). */
+export function setEarned(item: Item, earned: number | null): void {
+  item.earned = earned
+  item.status = forScore(item.status, earned)
 }
 
-/** Table-row class for an item's status; '' when not graded yet. */
-export function rowClass(status: Status | undefined): string {
-  return status ? ROW_CLASS[status] : ''
+/** Mark an item as excluded from the grade, or include it again. */
+export function setExcluded(item: Item, excluded: boolean): void {
+  item.status = excluded ? 'excluded' : forScore('ungraded', item.earned)
 }
 
 /**
@@ -72,5 +60,5 @@ export function rowClass(status: Status | undefined): string {
  * the first item in a category is out of 100.
  */
 export function newItem(name: string, previous?: Item): Item {
-  return { id: newId('item'), name, earned: null, possible: previous?.possible ?? 100 }
+  return { id: newId('item'), name, earned: null, possible: previous?.possible ?? 100, status: 'ungraded' }
 }

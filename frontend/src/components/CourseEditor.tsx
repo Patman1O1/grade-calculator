@@ -8,7 +8,8 @@ import {
   type Mutate,
 } from '../course'
 import { formatNumber, formatPercent } from '../format'
-import { percentOf, rowClass } from '../item'
+import { percentOf, setEarned, setExcluded } from '../item'
+import { rowClass } from '../status'
 import { NumberInput } from './NumberInput'
 
 interface Props {
@@ -166,7 +167,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
                           className="num"
                           placeholder="–"
                           value={item.earned}
-                          onChange={(v) => mutate((d) => void (d.categories[ci].items[ii].earned = v))}
+                          onChange={(v) => mutate((d) => setEarned(d.categories[ci].items[ii], v))}
                         />
                       </td>
                       <td>
@@ -198,10 +199,8 @@ export function CourseEditor({ course, graded, mutate }: Props) {
                         <input
                           type="checkbox"
                           aria-label={`Exclude ${item.name}`}
-                          checked={!!item.excluded}
-                          onChange={(e) =>
-                            mutate((d) => void (d.categories[ci].items[ii].excluded = e.target.checked))
-                          }
+                          checked={item.status === 'excluded'}
+                          onChange={(e) => mutate((d) => setExcluded(d.categories[ci].items[ii], e.target.checked))}
                         />
                       </td>
                       {hasDrops && (

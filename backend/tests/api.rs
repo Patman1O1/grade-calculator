@@ -5,7 +5,7 @@ mod fixtures;
 
 use grade_calculator::api::{NOT_A_COURSE, evaluate, import_courses, normalize_courses, summaries};
 use grade_calculator::course::Course;
-use grade_calculator::item::Status;
+use grade_calculator::status::Status;
 use serde_json::{Value, json};
 
 fn to_json<T: serde::Serialize>(v: &T) -> Value {
@@ -23,10 +23,10 @@ fn blank_course_is_ungraded() {
     assert!(course.get("id").is_none());
     assert!(course["categories"][0].get("id").is_none());
     assert!(course["categories"][0]["items"][0].get("id").is_none());
-    // Ungraded courses carry no computed fields.
+    // Ungraded courses carry no computed fields; an item's status is stored.
     assert!(course.get("percent").is_none());
     assert!(course["categories"][0].get("earned").is_none());
-    assert!(course["categories"][0]["items"][0].get("status").is_none());
+    assert_eq!(course["categories"][0]["items"][0]["status"], "ungraded");
 }
 
 #[test]
@@ -138,22 +138,29 @@ fn normalize_converts_saved_courses_in_order() {
 }
 
 #[test]
-fn computed_fields_in_input_are_ignored() {
+fn computed_fields_in_input_are_recomputed() {
     let forged = json!({ "name": "F", "scheme": "points", "scale": [], "percent": 100, "letter": "A",
         "categories": [{ "name": "C", "weight": 0, "earned": 99,
-            "items": [{ "name": "I", "score": 0, "outOf": 10, "earned": 10, "status": "counted" }] }] });
+            "items": [
+                { "name": "I", "score": 0, "outOf": 10, "earned": 10, "status": "dropped" },
+                { "name": "J", "earned": 5, "possible": 10, "status": "excluded" }
+            ] }] });
 
     let imported = import_courses(forged.clone()).unwrap();
     assert_eq!(imported[0].percent, None);
     assert_eq!(imported[0].categories[0].earned, None);
     // In the older score/outOf form, `earned` comes from the score, not the forged value.
     assert_eq!(imported[0].categories[0].items[0].earned, Some(0.0));
-    assert_eq!(imported[0].categories[0].items[0].status, None);
+    assert_eq!(imported[0].categories[0].items[0].status, Status::Counted);
+    assert_eq!(imported[0].categories[0].items[1].status, Status::Excluded);
 
     let course: Course = serde_json::from_value(forged).unwrap();
     let graded = evaluate(&course, &[]).course;
     assert_eq!(graded.percent, Some(0.0));
     assert_eq!(graded.letter, None);
     assert_eq!(graded.categories[0].items[0].earned, Some(0.0));
-    assert_eq!(graded.categories[0].items[0].status, Some(Status::Counted));
+    assert_eq!(graded.categories[0].items[0].status, Status::Counted);
+    // The excluded item is kept out: 0/10, not 5/20.
+    assert_eq!(graded.categories[0].items[1].status, Status::Excluded);
+    assert_eq!((graded.earned, graded.possible), (Some(0.0), Some(10.0)));
 }

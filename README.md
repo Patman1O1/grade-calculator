@@ -45,9 +45,11 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 | `normalizeCourses(courses)` | saved courses converted to the current format, in the same order (`null` for entries that aren't courses) |
 | `importCourses(data)` | the courses in `data` (one or a list), validated |
 
-A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course; `earned`, `possible` and `percent` on each category; and `status` (`counted`, `dropped`, `excluded` or `ungraded`) on each item. They are left out of ungraded courses and ignored on input.
+A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course, and `earned`, `possible` and `percent` on each category. They are left out of ungraded courses and ignored on input.
 
-`normalizeCourses(courses)` converts courses saved by an earlier version of the app (items stored as `score` / `outOf` / `worth`) to the current format; the app runs saved courses through it on startup. `importCourses` accepts that older format too.
+Each item also has a stored `status`: `counted`, `dropped`, `excluded` or `ungraded`. Only `excluded` is the user's choice (the **Excl.** checkbox) and the engine keeps it; it recomputes the other three from the score and the drop rules on every evaluation, whatever was stored or sent in.
+
+`normalizeCourses(courses)` converts courses saved by an earlier version of the app (items stored as `score` / `outOf` / `worth`, or with `excluded: true`) to the current format; the app runs saved courses through it on startup. `importCourses` accepts that older format too.
 
 Ids are the front-end's alone (React keys, the selected course, which course an edit applies to); the engine has none and ignores any it is given. [`frontend/src/engine.ts`](frontend/src/engine.ts) gives every course that comes back from the engine ids: new ones for new, imported and duplicated courses, and the saved ones (matched by position) for courses loaded from storage. Graded results and summaries are matched to the course by position.
 
@@ -62,7 +64,7 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 | **Item** | `earned` out of `possible` points. A blank `earned` means the item is not graded yet and is ignored. `possible = 0` makes the item pure extra credit. |
 | **Earned / Total Points** | Each item has two fields next to its name: **Earned Points** (leave blank until it's graded) and **Total Points**. To enter a percentage, use a total of 100. |
 | **Points set weight** | Within a category, items count in proportion to their total points: a 10-point quiz counts a tenth as much as a 100-point exam. To make a 0–100 report count 10 points, enter it scaled (85/100 → 8.5 / 10). |
-| **Excluded** | The item is shown but does not count (for example Canvas "does not count toward final grade" items, or sub-scores). |
+| **Excluded** | The item is shown but does not count (for example Canvas "does not count toward final grade" items, or sub-scores). Stored as the item's `status: "excluded"`. |
 | **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. Items marked *Keep* are never dropped. |
 | **Total points** | Course % = sum of earned / sum of possible over all categories. |
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |

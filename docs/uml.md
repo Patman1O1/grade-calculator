@@ -27,7 +27,8 @@ flowchart LR
     NumberInput["components/NumberInput.tsx"]
     coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, CourseSummary, Mutate"]
     categoryts["category.ts<br/>Category"]
-    itemts["item.ts<br/>Item, Status"]
+    itemts["item.ts<br/>Item"]
+    statusts["status.ts<br/>Status"]
     enginets["engine.ts<br/>typed wrapper + result types"]
     glue["wasm/engine.js<br/>generated glue"]
     storage["storage.ts<br/>localStorage"]
@@ -36,7 +37,8 @@ flowchart LR
   subgraph engine["backend/ (Rust → engine_bg.wasm)"]
     wasm["wasm.rs<br/>#[wasm_bindgen] exports"]
     api["api.rs<br/>evaluate, summaries, import"]
-    item["item/mod.rs<br/>Item, Status"]
+    item["item/mod.rs<br/>Item"]
+    status["status/mod.rs<br/>Status"]
     category["category/mod.rs<br/>Category + drop search"]
     course["course/mod.rs<br/>Course, Scheme, Cutoff, Needed"]
   end
@@ -55,12 +57,14 @@ flowchart LR
   CourseEditor --> categoryts
   CourseEditor --> itemts
   Summary --> coursets
-  coursets --> categoryts --> itemts
+  coursets --> categoryts --> itemts --> statusts
+  CourseEditor --> statusts
   glue -->|"calls (JS objects via serde-wasm-bindgen)"| wasm
   wasm --> api
   api --> course
   course -->|grades| category
   category -->|grades| item
+  item --> status
 ```
 
 ## 2. Domain model and grading (`backend/src/item/mod.rs`, `category/mod.rs`, `course/mod.rs`; mirrored in `frontend/src/item.ts`, `category.ts`, `course.ts`)
@@ -113,10 +117,10 @@ classDiagram
     +name: String
     +earned?: f64
     +possible: f64
-    +excluded: bool
     +neverDrop: bool
     +note?: String
-    +/status?: Status
+    +status: Status
+    +is_excluded(&self) bool
     +is_remaining(&self) bool
     +percent(&self) Option~f64~
     +grade(&mut self)
@@ -133,23 +137,25 @@ classDiagram
     Dropped = "dropped"
     Excluded = "excluded"
     Ungraded = "ungraded"
+    +for_score(self, earned: Option~f64~) Status
+    +counts(self) bool
   }
   Course "1" *-- "0..*" Category : categories
   Category "1" *-- "0..*" Item : items
   Course "1" *-- "0..*" Cutoff : scale
   Course --> "1" Scheme : scheme
-  Item --> "0..1" Status : status
+  Item --> "1" Status : status
   Course ..> Needed : needed_on_remaining
 ```
 
-- `excluded`, `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false, so the JSON matches what the TypeScript-only version of the app exported.
+- `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false.
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
 - An item is `earned` out of `possible` points; those points are also how much it counts in its category. Deserialising goes through a private `RawItem` (`#[serde(try_from)]`) that also accepts the older `score` / `outOf` / `worth` form and converts it as the old engine scored it (`score / outOf × worth` out of `worth`), so saved courses and old exports still load.
-- `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
+- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`, and older data's `excluded: true` becomes `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
-- Each of `item/`, `category/` and `course/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
+- Each of `item/`, `category/`, `course/`, `status/` and `utils/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` live in `utils/` (`mod.rs`, with their tests in `tests.rs`). `lib.rs` only declares the modules (`api`, `category`, `course`, `item`, `utils`, `wasm`); types are used by their full paths, e.g. `crate::course::Course`.
 
 ## 3. "What do I need?" (`backend/src/course/mod.rs`)
@@ -401,16 +407,24 @@ classDiagram
   }
   class item {
     <<module>>
-    +Item, Status
-    -ROW_CLASS: Record~Status, string~$
-    +rowClass(status)$ string
+    +Item
     +percentOf(item)$ number or null
+    +setEarned(item, earned)$ void
+    +setExcluded(item, excluded)$ void
     +newItem(name, previous)$ Item
     +EngineItem
     +withItemId(item, id?)$ Item
   }
+  class status {
+    <<module>>
+    +Status
+    +forScore(status, earned)$ Status
+    -ROW_CLASS: Record~Status, string~$
+    +rowClass(status)$ string
+  }
   course ..> category : Category
   category ..> item : Item, newItem
+  item ..> status : Status, forScore
 ```
 
 `main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` gives every course the engine returns its ids with `withIds` (new ids, or the saved ones matched by position in `normalizeCourses`), and also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.
