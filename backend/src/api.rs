@@ -4,7 +4,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::course::{self, Course, Needed};
+use crate::course::{Course, Needed};
 
 /// A target percentage and what it takes to reach it.
 #[derive(Debug, Serialize)]
@@ -68,7 +68,7 @@ pub const NOT_A_COURSE: &str = "That file is not a course exported from this cal
 /// Validate exported JSON (one course or a list of them). Entries that
 /// aren't courses are skipped; it is an error if none are.
 pub fn import_courses(data: Value) -> Result<Vec<Course>, &'static str> {
-    let courses: Vec<Course> = parse_courses(data).into_iter().flatten().collect();
+    let courses = parse_courses(data);
     if courses.is_empty() {
         Err(NOT_A_COURSE)
     } else {
@@ -76,27 +76,17 @@ pub fn import_courses(data: Value) -> Result<Vec<Course>, &'static str> {
     }
 }
 
-/// Bring courses saved by an earlier version of the app up to the current
-/// format (e.g. items stored as `score` / `outOf` / `worth`). The result is
-/// in the same order as the input, with `None` for entries that aren't
-/// courses, so the caller can match each one to what it saved.
-pub fn normalize_courses(data: Value) -> Vec<Option<Course>> {
-    parse_courses(data)
-}
-
-/// Each entry of `data` (one course or a list) as a course, or `None` if it
-/// isn't one. Older JSON forms are upgraded first, and each item's status is
-/// recomputed from its score, so only an `"excluded"` status is taken from
-/// the input.
-fn parse_courses(data: Value) -> Vec<Option<Course>> {
+/// The courses in `data` (one course or a list), skipping anything that
+/// isn't one. Each item's status is recomputed from its score, so only an
+/// `"excluded"` status is taken from the input.
+fn parse_courses(data: Value) -> Vec<Course> {
     let list = match data {
         Value::Array(list) => list,
         other => vec![other],
     };
     list.into_iter()
-        .map(|mut v| {
-            course::upgrade_json(&mut v);
-            let mut course = serde_json::from_value::<Course>(v).ok()?;
+        .filter_map(|v| serde_json::from_value::<Course>(v).ok())
+        .map(|mut course| {
             for item in course
                 .categories
                 .iter_mut()
@@ -104,7 +94,7 @@ fn parse_courses(data: Value) -> Vec<Option<Course>> {
             {
                 item.grade();
             }
-            Some(course)
+            course
         })
         .collect()
 }

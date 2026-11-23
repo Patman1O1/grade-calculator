@@ -12,10 +12,9 @@ fn item(earned: Option<f64>, possible: f64) -> Item {
     }
 }
 
-/// Read an item the way courses come in (import, saved courses): upgrade
-/// older JSON, deserialise, then grade, which recomputes the status.
-fn parse(mut v: serde_json::Value) -> Item {
-    upgrade_json(&mut v);
+/// Read an item the way imported courses come in: deserialise, then grade,
+/// which recomputes the status.
+fn parse(v: serde_json::Value) -> Item {
     let mut item: Item = serde_json::from_value(v).unwrap();
     item.grade();
     item
@@ -95,59 +94,8 @@ fn serialises_status_and_only_trusts_excluded_on_input() {
 }
 
 #[test]
-fn converts_the_older_score_out_of_worth_form() {
-    // A 0–100 report worth 10 points: 85/100 → 8.5 of 10.
-    let i = parse(json!({ "name": "Report", "score": 85, "outOf": 100, "worth": 10 }));
-    assert_eq!((i.earned, i.possible), (Some(85.0 / 100.0 * 10.0), 10.0));
-    // Without worth, the points are the raw score.
-    let i = parse(json!({ "name": "Quiz", "score": 7, "outOf": 10, "neverDrop": true }));
-    assert_eq!(
-        (i.earned, i.possible, i.never_drop),
-        (Some(7.0), 10.0, true)
-    );
-    // Ungraded keeps its (rescaled) points possible.
-    let i = parse(json!({ "name": "Exam", "score": null, "outOf": 100, "worth": 50 }));
-    assert_eq!((i.earned, i.possible), (None, 50.0));
-    // Zero-point extra credit keeps its raw score.
-    let i = parse(json!({ "name": "EC", "score": 65.39, "outOf": 0 }));
-    assert_eq!((i.earned, i.possible), (Some(65.39), 0.0));
-    // `excluded: true` becomes status "excluded".
-    let i = parse(json!({ "name": "Late Days", "score": 4, "outOf": 5, "excluded": true }));
-    assert_eq!((i.earned, i.status), (Some(4.0), Status::Excluded));
-    // Old computed fields are ignored.
-    let i =
-        parse(json!({ "name": "X", "score": 0, "outOf": 10, "earned": 10, "status": "dropped" }));
-    assert_eq!(
-        (i.earned, i.possible, i.status),
-        (Some(0.0), 10.0, Status::Counted)
-    );
-}
-
-#[test]
 fn rejects_items_without_points_possible() {
     assert!(serde_json::from_value::<Item>(json!({ "name": "?", "earned": 5 })).is_err());
-}
-
-#[test]
-fn upgrade_json_leaves_the_current_form_alone() {
-    let current = json!({ "name": "Q", "earned": 3, "possible": 10, "status": "excluded", "neverDrop": true });
-    let mut v = current.clone();
-    upgrade_json(&mut v);
-    assert_eq!(v, current);
-    // Not an object: nothing to do.
-    let mut v = json!(5);
-    upgrade_json(&mut v);
-    assert_eq!(v, json!(5));
-}
-
-#[test]
-fn upgrade_json_rewrites_the_older_form() {
-    let mut v = json!({ "name": "R", "score": 85, "outOf": 100, "worth": 10, "excluded": true, "note": "n" });
-    upgrade_json(&mut v);
-    assert_eq!(
-        v,
-        json!({ "name": "R", "earned": 85.0 / 100.0 * 10.0, "possible": 10.0, "status": "excluded", "note": "n" })
-    );
 }
 
 #[test]

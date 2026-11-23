@@ -38,9 +38,9 @@ export function percentOf(item: Item): number | null {
 /** An item as the engine returns it: no id (ids belong to the front-end). */
 export type EngineItem = Omit<Item, 'id'>
 
-/** Give an item from the engine an id: `id` if given (e.g. its saved id), otherwise a new one. */
-export function withItemId(item: EngineItem, id: string = newId('item')): Item {
-  return { id, ...item }
+/** Give an item from the engine a new id. */
+export function withItemId(item: EngineItem): Item {
+  return { id: newId('item'), ...item }
 }
 
 /** Set an item's score, keeping its stored status in step ('counted' / 'ungraded'). */

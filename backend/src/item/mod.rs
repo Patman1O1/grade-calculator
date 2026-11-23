@@ -1,7 +1,6 @@
 //! [`Item`]: one graded thing (a quiz, an exam, a lab).
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 
 use crate::status::Status;
 use crate::utils::is_false;
@@ -11,9 +10,6 @@ use crate::utils::is_false;
 /// Its points are what it contributes to its category, so they also set how
 /// much it counts there: a 10-point quiz counts a tenth as much as a 100-point
 /// exam.
-///
-/// JSON in an older form (`score` / `outOf` / `worth` / `excluded`) is
-/// rewritten to this one by [`upgrade_json`] before it is deserialised.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
@@ -37,37 +33,6 @@ pub struct Item {
     /// trusted except `Excluded`.
     #[serde(default)]
     pub status: Status,
-}
-
-/// Rewrite an item's JSON from the older `score` / `outOf` / `worth` /
-/// `excluded` form to the current `earned` / `possible` / `status` form, in
-/// place. JSON already in the current form is left alone.
-///
-/// The points convert exactly as the old engine scored them: `score / outOf
-/// * worth` out of `worth` (`worth` defaults to `outOf`), or the raw score
-/// on top for zero-point extra credit. `excluded: true` becomes
-/// `status: "excluded"`.
-pub fn upgrade_json(item: &mut Value) {
-    let Some(item) = item.as_object_mut() else {
-        return;
-    };
-    if let Some(out_of) = item.remove("outOf").and_then(|v| v.as_f64()) {
-        let score = item.remove("score").and_then(|v| v.as_f64());
-        let worth = item
-            .remove("worth")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(out_of);
-        let (earned, possible) = if out_of > 0.0 {
-            (score.map(|s| s / out_of * worth), worth)
-        } else {
-            (score, 0.0)
-        };
-        item.insert("earned".into(), json!(earned));
-        item.insert("possible".into(), json!(possible));
-    }
-    if item.remove("excluded").and_then(|v| v.as_bool()) == Some(true) {
-        item.insert("status".into(), json!("excluded"));
-    }
 }
 
 impl Item {

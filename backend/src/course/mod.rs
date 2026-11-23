@@ -5,9 +5,7 @@ use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
-use serde_json::Value;
-
-use crate::category::{self, Category};
+use crate::category::Category;
 use crate::item::Item;
 
 /// How a course combines its categories.
@@ -71,14 +69,6 @@ pub struct Course {
     pub percent: Option<f64>,
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub letter: Option<String>,
-}
-
-/// Rewrite a course's JSON from older forms to the current one, in place
-/// (see [`crate::item::upgrade_json`]).
-pub fn upgrade_json(course: &mut Value) {
-    if let Some(categories) = course.get_mut("categories").and_then(Value::as_array_mut) {
-        categories.iter_mut().for_each(category::upgrade_json);
-    }
 }
 
 /// The usual 90/80/70/60 letter scale.

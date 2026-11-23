@@ -42,16 +42,13 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 | `blankCourse()` | a starter `Course` |
 | `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
 | `summaries(courses)` | `[{ percent, letter }]`, in the same order as `courses` |
-| `normalizeCourses(courses)` | saved courses converted to the current format, in the same order (`null` for entries that aren't courses) |
 | `importCourses(data)` | the courses in `data` (one or a list), validated |
 
 A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course, and `earned`, `possible` and `percent` on each category. They are left out of ungraded courses and ignored on input.
 
 Each item also has a stored `status`: `counted`, `dropped`, `excluded` or `ungraded`. Only `excluded` is the user's choice (the **Excl.** checkbox) and the engine keeps it; it recomputes the other three from the score and the drop rules on every evaluation, whatever was stored or sent in.
 
-`normalizeCourses(courses)` converts courses saved by an earlier version of the app (items stored as `score` / `outOf` / `worth`, or with `excluded: true`) to the current format; the app runs saved courses through it on startup. `importCourses` accepts that older format too.
-
-Ids are the front-end's alone (React keys, the selected course, which course an edit applies to); the engine has none and ignores any it is given. [`frontend/src/engine.ts`](frontend/src/engine.ts) gives every course that comes back from the engine ids: new ones for new, imported and duplicated courses, and the saved ones (matched by position) for courses loaded from storage. Graded results and summaries are matched to the course by position.
+Ids are the front-end's alone (React keys, the selected course, which course an edit applies to); the engine has none and ignores any it is given. [`frontend/src/engine.ts`](frontend/src/engine.ts) gives the courses the engine creates (new, imported and duplicated ones) new ids. Graded results and summaries are matched to the course by position.
 
 ## Deploying
 

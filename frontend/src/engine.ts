@@ -36,12 +36,6 @@ export const engine = {
   evaluate: (course: Course, targets: number[]): Evaluation => wasm.evaluate(course, targets),
   /** Each course's overall grade, in the same order as `courses`. */
   summaries: (courses: Course[]): CourseSummary[] => wasm.summaries(courses),
-  /**
-   * Convert courses saved by an earlier version of the app to the current
-   * format, keeping their ids. Entries that aren't courses are left out.
-   */
-  normalizeCourses: (saved: Course[]): Course[] =>
-    (wasm.normalizeCourses(saved) as (EngineCourse | null)[]).flatMap((c, i) => (c ? [withIds(c, saved[i])] : [])),
   /** Validate parsed JSON (one course or a list) and get its courses with new ids. Throws if it has no course. */
-  importCourses: (data: unknown): Course[] => (wasm.importCourses(data) as EngineCourse[]).map((c) => withIds(c)),
+  importCourses: (data: unknown): Course[] => (wasm.importCourses(data) as EngineCourse[]).map(withIds),
 }

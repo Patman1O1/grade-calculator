@@ -43,15 +43,7 @@ export function hasDropRules(category: Category): boolean {
 /** A category as the engine returns it: no ids (ids belong to the front-end). */
 export type EngineCategory = Omit<Category, 'id' | 'items'> & { items: EngineItem[] }
 
-/**
- * Give a category from the engine, and its items, ids: the ids of `saved`
- * (the same category as stored, matched by position) where there is one,
- * new ids otherwise.
- */
-export function withCategoryIds(category: EngineCategory, saved?: Category): Category {
-  return {
-    id: saved?.id ?? newId('cat'),
-    ...category,
-    items: category.items.map((item, i) => withItemId(item, saved?.items[i]?.id)),
-  }
+/** Give a category from the engine, and its items, new ids. */
+export function withCategoryIds(category: EngineCategory): Category {
+  return { id: newId('cat'), ...category, items: category.items.map(withItemId) }
 }

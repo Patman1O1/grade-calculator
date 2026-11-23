@@ -46,17 +46,9 @@ export type Needed =
 /** A course as the engine returns it: no ids (ids belong to the front-end). */
 export type EngineCourse = Omit<Course, 'id' | 'categories'> & { categories: EngineCategory[] }
 
-/**
- * Give a course from the engine, and everything in it, ids: the ids of
- * `saved` (the same course as stored, matched by position) where there is
- * one, new ids otherwise.
- */
-export function withIds(course: EngineCourse, saved?: Course): Course {
-  return {
-    id: saved?.id ?? newId('course'),
-    ...course,
-    categories: course.categories.map((c, i) => withCategoryIds(c, saved?.categories[i])),
-  }
+/** Give a course from the engine, and everything in it, new ids. */
+export function withIds(course: EngineCourse): Course {
+  return { id: newId('course'), ...course, categories: course.categories.map(withCategoryIds) }
 }
 
 /** A course's overall grade, for the course picker (from `engine.summaries`, in course order). */

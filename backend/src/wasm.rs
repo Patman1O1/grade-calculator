@@ -43,14 +43,6 @@ pub fn summaries(courses: JsValue) -> Result<JsValue, JsError> {
     to_js(&api::summaries(from_js(courses, "courses")?))
 }
 
-/// `normalizeCourses(courses): (Course | null)[]`: convert courses saved by an
-/// earlier version of the app to the current format, in the same order, with
-/// `null` for entries that aren't courses.
-#[wasm_bindgen(js_name = normalizeCourses)]
-pub fn normalize_courses(courses: JsValue) -> Result<JsValue, JsError> {
-    to_js(&api::normalize_courses(from_js(courses, "courses")?))
-}
-
 /// `importCourses(data): Course[]`: validate parsed JSON (one course or a list).
 /// Throws if nothing in it is a course.
 #[wasm_bindgen(js_name = importCourses)]

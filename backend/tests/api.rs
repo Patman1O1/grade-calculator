@@ -3,7 +3,7 @@
 
 mod fixtures;
 
-use grade_calculator::api::{NOT_A_COURSE, evaluate, import_courses, normalize_courses, summaries};
+use grade_calculator::api::{NOT_A_COURSE, evaluate, import_courses, summaries};
 use grade_calculator::course::Course;
 use grade_calculator::status::Status;
 use serde_json::{Value, json};
@@ -95,46 +95,8 @@ fn import_validates_courses_and_drops_ids() {
     assert!(out["categories"][0].get("id").is_none());
     assert!(out["categories"][0]["items"][0].get("id").is_none());
 
-    // Exports from the old TypeScript-only app have the same shape (ids optional).
-    let legacy = json!({ "name": "Old", "scheme": "points", "scale": [], "categories": [
-        { "name": "C", "weight": 0, "items": [{ "name": "I", "score": 1, "outOf": 2, "neverDrop": true }] }
-    ]});
-    let imported = import_courses(legacy).unwrap();
-    let item = &imported[0].categories[0].items[0];
-    assert!(item.never_drop);
-    // ...and are converted to earned / possible.
-    assert_eq!((item.earned, item.possible), (Some(1.0), 2.0));
-    let out = to_json(&imported[0]);
-    assert!(out["categories"][0]["items"][0].get("outOf").is_none());
-
     assert_eq!(import_courses(json!({ "hello": 1 })), Err(NOT_A_COURSE));
     assert_eq!(import_courses(json!(42)), Err(NOT_A_COURSE));
-}
-
-#[test]
-fn normalize_converts_saved_courses_in_order() {
-    let saved = json!([
-        { "id": "c1", "name": "Old", "scheme": "points", "scale": [], "categories": [
-            { "id": "k1", "name": "C", "weight": 0, "items": [
-                { "id": "i1", "name": "Report", "score": 85, "outOf": 100, "worth": 10 }
-            ] }
-        ] },
-        { "not": "a course" }
-    ]);
-    let courses = normalize_courses(saved);
-    // Same order as the input, with None for the entry that isn't a course,
-    // so the front-end can put its ids back by position.
-    assert_eq!(courses.len(), 2);
-    assert!(courses[1].is_none());
-    let course = courses[0].as_ref().unwrap();
-    assert_eq!(course.name, "Old");
-    let item = &course.categories[0].items[0];
-    assert_eq!(item.name, "Report");
-    assert_eq!(
-        (item.earned, item.possible),
-        (Some(85.0 / 100.0 * 10.0), 10.0)
-    );
-    assert!(normalize_courses(json!([])).is_empty());
 }
 
 #[test]
@@ -142,15 +104,13 @@ fn computed_fields_in_input_are_recomputed() {
     let forged = json!({ "name": "F", "scheme": "points", "scale": [], "percent": 100, "letter": "A",
         "categories": [{ "name": "C", "weight": 0, "earned": 99,
             "items": [
-                { "name": "I", "score": 0, "outOf": 10, "earned": 10, "status": "dropped" },
+                { "name": "I", "earned": 0, "possible": 10, "status": "dropped" },
                 { "name": "J", "earned": 5, "possible": 10, "status": "excluded" }
             ] }] });
 
     let imported = import_courses(forged).unwrap();
     assert_eq!(imported[0].percent, None);
     assert_eq!(imported[0].categories[0].earned, None);
-    // In the older score/outOf form, `earned` comes from the score, not the forged value.
-    assert_eq!(imported[0].categories[0].items[0].earned, Some(0.0));
     assert_eq!(imported[0].categories[0].items[0].status, Status::Counted);
     assert_eq!(imported[0].categories[0].items[1].status, Status::Excluded);
 

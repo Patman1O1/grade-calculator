@@ -120,7 +120,6 @@ classDiagram
     +neverDrop: bool
     +note?: String
     +status: Status
-    +upgrade_json(item: &mut Value)$
     +is_excluded(&self) bool
     +is_remaining(&self) bool
     +percent(&self) Option~f64~
@@ -153,8 +152,8 @@ classDiagram
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
-- An item is `earned` out of `possible` points; those points are also how much it counts in its category. `Item` uses serde's derived `Deserialize`. Courses that come in from outside (import, saved courses) first go through `course::upgrade_json`, which walks to each category's and item's `upgrade_json` and rewrites the older `score` / `outOf` / `worth` / `excluded` JSON into the current form, converting points exactly as the old engine scored them (`score / outOf × worth` out of `worth`). `api::parse_courses` then grades each item's status, so only an `"excluded"` status is taken from the input.
-- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`, and older data's `excluded: true` becomes `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
+- An item is `earned` out of `possible` points; those points are also how much it counts in its category. `Item` uses serde's derived `Deserialize`; `api::parse_courses` (import) then grades each item's status, so only an `"excluded"` status is taken from the input.
+- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - Each of `item/`, `category/`, `course/`, `status/` and `utils/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` live in `utils/` (`mod.rs`, with their tests in `tests.rs`). `lib.rs` only declares the modules (`api`, `category`, `course`, `item`, `utils`, `wasm`); types are used by their full paths, e.g. `crate::course::Course`.
@@ -258,7 +257,6 @@ classDiagram
     +blankCourse()$ Course
     +evaluate(course: JsValue, targets: JsValue)$ Evaluation
     +summaries(courses: JsValue)$ CourseSummary[]
-    +normalizeCourses(courses: JsValue)$ (Course or null)[]
     +importCourses(data: JsValue)$ Course[]
     -to_js(value)$ JsValue
     -from_js(value, what)$ T
@@ -269,7 +267,6 @@ classDiagram
     +evaluate(course: &Course, targets: &[f64])$ Evaluation
     +summaries(courses: Vec~Course~)$ Vec~CourseSummary~
     +import_courses(data: Value)$ Result~Vec~Course~, &str~
-    +normalize_courses(data: Value)$ Vec~Option~Course~~
   }
   class Evaluation {
     <<struct>>
@@ -358,7 +355,6 @@ classDiagram
     +blankCourse()$ Course
     +evaluate(course, targets)$ Evaluation
     +summaries(courses)$ CourseSummary[]
-    +normalizeCourses(courses)$ Course[]
     +importCourses(data)$ Course[]
   }
   App *-- "0..1" CourseView : selected course
@@ -391,7 +387,7 @@ classDiagram
     +targets(course, custom)$ number[]
     +totalWeight(course)$ number
     +EngineCourse
-    +withIds(course, saved?)$ Course
+    +withIds(course)$ Course
     +updateCourse(courses, id, fn)$ Course[]
     +percentsById(courses, summaries)$ Map~string, number or null~
     +exportFileName(course)$ string
@@ -404,7 +400,7 @@ classDiagram
     +addItem(category)$ void
     +hasDropRules(category)$ boolean
     +EngineCategory
-    +withCategoryIds(category, saved?)$ Category
+    +withCategoryIds(category)$ Category
   }
   class item {
     <<module>>
@@ -414,7 +410,7 @@ classDiagram
     +setExcluded(item, excluded)$ void
     +newItem(name, previous)$ Item
     +EngineItem
-    +withItemId(item, id?)$ Item
+    +withItemId(item)$ Item
   }
   class status {
     <<module>>
@@ -428,4 +424,4 @@ classDiagram
   item ..> status : Status, forScore
 ```
 
-`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` gives every course the engine returns its ids with `withIds` (new ids, or the saved ones matched by position in `normalizeCourses`), and also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` gives every course the engine creates new ids with `withIds`, and also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`.
