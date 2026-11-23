@@ -4,7 +4,9 @@
 mod fixtures;
 
 use fixtures::{cs401, cs411, cs440, math218, math218_canvas};
-use grade_calculator::{Course, Status, round};
+use grade_calculator::course::Course;
+use grade_calculator::item::Status;
+use grade_calculator::utils::round;
 
 /// `(percent, earned, possible)` of a category, rounded to 2 places.
 fn category(r: &Course, name: &str) -> (Option<f64>, f64, f64) {

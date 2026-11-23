@@ -4,7 +4,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{Course, Needed};
+use crate::course::{Course, Needed};
 
 /// A target percentage and what it takes to reach it.
 #[derive(Debug, Serialize)]

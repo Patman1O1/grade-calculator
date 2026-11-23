@@ -4,8 +4,8 @@ use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::is_false;
 use crate::item::Item;
+use crate::utils::is_false;
 
 /// A group of items (homework, exams, …). It may drop the lowest/highest
 /// results, and carries a weight when the course is weighted.

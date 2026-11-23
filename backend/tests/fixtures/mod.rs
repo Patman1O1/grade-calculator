@@ -5,8 +5,10 @@
 
 #![allow(dead_code)] // each test file uses a different subset
 
+use grade_calculator::category::Category;
 use grade_calculator::course::standard_scale;
-use grade_calculator::{Category, Course, Cutoff, Item, Scheme};
+use grade_calculator::course::{Course, Cutoff, Scheme};
+use grade_calculator::item::Item;
 
 /// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {

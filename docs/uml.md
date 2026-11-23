@@ -150,7 +150,7 @@ classDiagram
 - `Item::grade` sets each item's `Status` to `Excluded` (if marked excluded, even once it has a score), `Ungraded` (no score) or `Counted`; `Category::apply_drops` then changes some `Counted` items to `Dropped`. The category sums only `Counted` items, and the front-end styles each row by its status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - Each of `item/`, `category/` and `course/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
-- `round` (display rounding, used by tests) and the serde helper `is_false` are free functions in `lib.rs`, which also re-exports all six types at the crate root.
+- `round` (display rounding, used by tests) and the serde helper `is_false` live in `utils/` (`mod.rs`, with their tests in `tests.rs`). `lib.rs` only declares the modules (`api`, `category`, `course`, `item`, `utils`, `wasm`); types are used by their full paths, e.g. `crate::course::Course`.
 
 ## 3. "What do I need?" (`backend/src/course/mod.rs`)
 

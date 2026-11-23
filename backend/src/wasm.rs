@@ -10,7 +10,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use wasm_bindgen::prelude::*;
 
-use crate::{Course, api};
+use crate::api;
+use crate::course::Course;
 
 fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
     value

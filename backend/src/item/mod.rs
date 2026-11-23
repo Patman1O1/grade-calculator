@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::is_false;
+use crate::utils::is_false;
 
 /// Whether an item counts toward its category's grade, and if not, why not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,7 +120,7 @@ impl Item {
     }
 
     /// Grade the item on its own, before any drop rule: sets `status` to
-    /// `Counted`, `Excluded` or `Ungraded`. [`crate::Category::grade`] calls
+    /// `Counted`, `Excluded` or `Ungraded`. [`crate::category::Category::grade`] calls
     /// this for every item and then applies its drop rules, which can change
     /// `Counted` to `Dropped`.
     pub fn grade(&mut self) {

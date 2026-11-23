@@ -4,7 +4,8 @@
 mod fixtures;
 
 use grade_calculator::api::{NOT_A_COURSE, evaluate, import_courses, normalize_courses, summaries};
-use grade_calculator::{Course, Status};
+use grade_calculator::course::Course;
+use grade_calculator::item::Status;
 use serde_json::{Value, json};
 
 fn to_json<T: serde::Serialize>(v: &T) -> Value {
