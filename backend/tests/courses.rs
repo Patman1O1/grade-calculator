@@ -121,7 +121,7 @@ fn math218_syllabus_weighting_reproduces_posted_midsemester_score() {
         c.drop_lowest = None;
         for i in &mut c.items {
             if graded_later.contains(&i.name.as_str()) {
-                i.earned = None;
+                i.earned_points = None;
             }
         }
     }

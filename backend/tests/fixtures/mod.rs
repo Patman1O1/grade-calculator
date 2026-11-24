@@ -15,8 +15,8 @@ use grade_calculator::status::Status;
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
     Item {
         name: name.to_owned(),
-        earned: score,
-        possible: out_of,
+        earned_points: score,
+        total_points: out_of,
         ..Default::default()
     }
 }
@@ -42,9 +42,9 @@ impl ItemExt for Item {
     /// Rescale the item to count `worth` points (a 0–100 report worth 10
     /// points: 85/100 becomes 8.5/10), as the syllabus weights it.
     fn with_worth(mut self, worth: f64) -> Self {
-        if self.possible > 0.0 {
-            self.earned = self.earned.map(|e| e / self.possible * worth);
-            self.possible = worth;
+        if self.total_points > 0.0 {
+            self.earned_points = self.earned_points.map(|e| e / self.total_points * worth);
+            self.total_points = worth;
         }
         self
     }

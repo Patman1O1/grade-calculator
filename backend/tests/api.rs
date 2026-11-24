@@ -37,8 +37,8 @@ fn evaluates_a_course_and_solves_targets() {
         "categories": [{
             "id": "k", "name": "All", "weight": 0,
             "items": [
-                { "id": "a", "name": "A", "earned": 60, "possible": 100 },
-                { "id": "b", "name": "B", "earned": null, "possible": 100 }
+                { "id": "a", "name": "A", "earnedPoints": 60, "totalPoints": 100 },
+                { "id": "b", "name": "B", "earnedPoints": null, "totalPoints": 100 }
             ]
         }]
     }))
@@ -53,10 +53,10 @@ fn evaluates_a_course_and_solves_targets() {
     assert_eq!(graded["categories"][0]["percent"], 60.0);
     let items = &graded["categories"][0]["items"];
     assert_eq!(items[0]["status"], "counted");
-    assert_eq!(items[0]["earned"], 60.0);
-    assert_eq!(items[0]["possible"], 100.0);
+    assert_eq!(items[0]["earnedPoints"], 60.0);
+    assert_eq!(items[0]["totalPoints"], 100.0);
     assert_eq!(items[1]["status"], "ungraded");
-    assert_eq!(items[1]["earned"], Value::Null);
+    assert_eq!(items[1]["earnedPoints"], Value::Null);
 
     assert_eq!(out["remaining"], 1);
     assert_eq!(out["needs"][0]["target"], 80.0);
@@ -104,8 +104,8 @@ fn computed_fields_in_input_are_recomputed() {
     let forged = json!({ "name": "F", "scheme": "points", "scale": [], "percent": 100, "letter": "A",
         "categories": [{ "name": "C", "weight": 0, "earned": 99,
             "items": [
-                { "name": "I", "earned": 0, "possible": 10, "status": "dropped" },
-                { "name": "J", "earned": 5, "possible": 10, "status": "excluded" }
+                { "name": "I", "earnedPoints": 0, "totalPoints": 10, "status": "dropped" },
+                { "name": "J", "earnedPoints": 5, "totalPoints": 10, "status": "excluded" }
             ] }] });
 
     let imported = import_courses(forged).unwrap();
@@ -117,7 +117,7 @@ fn computed_fields_in_input_are_recomputed() {
     let graded = evaluate(&imported[0], &[]).course;
     assert_eq!(graded.percent, Some(0.0));
     assert_eq!(graded.letter, None);
-    assert_eq!(graded.categories[0].items[0].earned, Some(0.0));
+    assert_eq!(graded.categories[0].items[0].earned_points, Some(0.0));
     assert_eq!(graded.categories[0].items[0].status, Status::Counted);
     // The excluded item is kept out: 0/10, not 5/20.
     assert_eq!(graded.categories[0].items[1].status, Status::Excluded);

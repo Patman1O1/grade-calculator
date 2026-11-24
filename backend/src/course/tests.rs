@@ -4,10 +4,10 @@ use super::*;
 use crate::item::Item;
 use crate::utils::round;
 
-fn item(earned: Option<f64>, possible: f64) -> Item {
+fn item(earned_points: Option<f64>, total_points: f64) -> Item {
     Item {
-        earned,
-        possible,
+        earned_points,
+        total_points,
         ..Default::default()
     }
 }

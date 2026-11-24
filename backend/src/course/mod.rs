@@ -92,13 +92,13 @@ impl Course {
     /// Starting point for a new course: weighted, a Homework and an Exams
     /// category with one ungraded item each, and the standard letter scale.
     pub fn blank() -> Course {
-        let category = |name: &str, weight: f64, item: &str, possible: f64| Category {
+        let category = |name: &str, weight: f64, item: &str, total_points: f64| Category {
             name: name.to_owned(),
             weight,
             items: vec![Item {
                 name: item.to_owned(),
-                earned: None,
-                possible,
+                earned_points: None,
+                total_points,
                 ..Default::default()
             }],
             ..Default::default()
@@ -188,7 +188,7 @@ impl Course {
         let mut c = self.clone();
         for item in c.categories.iter_mut().flat_map(|c| c.items.iter_mut()) {
             if item.is_remaining() {
-                item.earned = Some(item.possible * fraction);
+                item.earned_points = Some(item.total_points * fraction);
             }
         }
         c

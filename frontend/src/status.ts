@@ -22,9 +22,9 @@ export type Status =
  * Rust): 'excluded' stays 'excluded'; otherwise 'counted' with a score and
  * 'ungraded' without.
  */
-export function forScore(status: Status, earned: number | null): Status {
+export function forScore(status: Status, earnedPoints: number | null): Status {
   if (status === 'excluded') return 'excluded'
-  return earned === null ? 'ungraded' : 'counted'
+  return earnedPoints === null ? 'ungraded' : 'counted'
 }
 
 /** Table-row class for each status (see index.css). */

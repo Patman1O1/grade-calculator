@@ -26,8 +26,8 @@ pub enum Status {
 impl Status {
     /// The status an item has before any drop rule: `Excluded` stays
     /// `Excluded`; otherwise `Counted` if it has a score, `Ungraded` if not.
-    pub fn for_score(self, earned: Option<f64>) -> Status {
-        match (self, earned) {
+    pub fn for_score(self, earned_points: Option<f64>) -> Status {
+        match (self, earned_points) {
             (Status::Excluded, _) => Status::Excluded,
             (_, None) => Status::Ungraded,
             (_, Some(_)) => Status::Counted,

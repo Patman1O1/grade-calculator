@@ -115,8 +115,8 @@ classDiagram
   class Item {
     <<struct>>
     +name: String
-    +earned?: f64
-    +possible: f64
+    +earnedPoints?: f64
+    +totalPoints: f64
     +neverDrop: bool
     +note?: String
     +status: Status
@@ -137,7 +137,7 @@ classDiagram
     Dropped = "dropped"
     Excluded = "excluded"
     Ungraded = "ungraded"
-    +for_score(self, earned: Option~f64~) Status
+    +for_score(self, earned_points: Option~f64~) Status
     +counts(self) bool
   }
   Course "1" *-- "0..*" Category : categories
@@ -152,8 +152,8 @@ classDiagram
 - The computed fields are `None` and left out of the JSON until the course is graded, so the courses the browser stores and exports never contain them. They are also ignored when a course is deserialised: a client can't send in a grade, it is always recomputed.
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
-- An item is `earned` out of `possible` points; those points are also how much it counts in its category. `Item` uses serde's derived `Deserialize`; `api::parse_courses` (import) then grades each item's status, so only an `"excluded"` status is taken from the input.
-- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned` and `possible`, so the UI can still show the score.
+- An item is `earned_points` out of `total_points` (`earnedPoints` / `totalPoints` in JSON); those points are also how much it counts in its category. Categories and courses keep `earned` / `possible` for their computed totals. `Item` uses serde's derived `Deserialize`; `api::parse_courses` (import) then grades each item's status, so only an `"excluded"` status is taken from the input.
+- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned_points` and `total_points`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - Each of `item/`, `category/`, `course/`, `status/` and `utils/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` live in `utils/` (`mod.rs`, with their tests in `tests.rs`). `lib.rs` only declares the modules (`api`, `category`, `course`, `item`, `utils`, `wasm`); types are used by their full paths, e.g. `crate::course::Course`.
@@ -406,7 +406,7 @@ classDiagram
     <<module>>
     +Item
     +percentOf(item)$ number or null
-    +setEarned(item, earned)$ void
+    +setEarnedPoints(item, earnedPoints)$ void
     +setExcluded(item, excluded)$ void
     +newItem(name, previous)$ Item
     +EngineItem
@@ -415,7 +415,7 @@ classDiagram
   class status {
     <<module>>
     +Status
-    +forScore(status, earned)$ Status
+    +forScore(status, earnedPoints)$ Status
     -ROW_CLASS: Record~Status, string~$
     +rowClass(status)$ string
   }

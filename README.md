@@ -58,12 +58,12 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 
 | Concept | Meaning |
 |---|---|
-| **Item** | `earned` out of `possible` points. A blank `earned` means the item is not graded yet and is ignored. `possible = 0` makes the item pure extra credit. |
+| **Item** | `earnedPoints` out of `totalPoints`. A blank `earnedPoints` means the item is not graded yet and is ignored. `totalPoints = 0` makes the item pure extra credit. |
 | **Earned / Total Points** | Each item has two fields next to its name: **Earned Points** (leave blank until it's graded) and **Total Points**. To enter a percentage, use a total of 100. |
 | **Points set weight** | Within a category, items count in proportion to their total points: a 10-point quiz counts a tenth as much as a 100-point exam. To make a 0–100 report count 10 points, enter it scaled (85/100 → 8.5 / 10). |
 | **Excluded** | The item is shown but does not count (for example Canvas "does not count toward final grade" items, or sub-scores). Stored as the item's `status: "excluded"`. |
 | **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. Items marked *Keep* are never dropped. |
-| **Total points** | Course % = sum of earned / sum of possible over all categories. |
+| **Total points** | Course % = sum of points earned / sum of points possible over all categories. |
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Each letter has a minimum %. The letters themselves are fixed (A–F on a new course, or whatever an imported course has); only each letter's minimum can be changed. |
 

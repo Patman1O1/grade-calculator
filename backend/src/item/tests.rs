@@ -4,10 +4,10 @@ use super::*;
 use crate::status::Status;
 use serde_json::json;
 
-fn item(earned: Option<f64>, possible: f64) -> Item {
+fn item(earned_points: Option<f64>, total_points: f64) -> Item {
     Item {
-        earned,
-        possible,
+        earned_points,
+        total_points,
         ..Default::default()
     }
 }
@@ -65,46 +65,52 @@ fn serialises_status_and_only_trusts_excluded_on_input() {
     let mut i = item(Some(1.0), 2.0);
     i.grade();
     let v = serde_json::to_value(&i).unwrap();
-    assert_eq!(v["earned"], 1.0);
-    assert_eq!(v["possible"], 2.0);
+    assert_eq!(v["earnedPoints"], 1.0);
+    assert_eq!(v["totalPoints"], 2.0);
     assert_eq!(v["status"], "counted");
     let back: Item = serde_json::from_value(v).unwrap();
     assert_eq!(
-        (back.earned, back.possible, back.status),
+        (back.earned_points, back.total_points, back.status),
         (Some(1.0), 2.0, Status::Counted)
     );
 
     // "excluded" is the user's choice and is kept, graded or not.
-    let i = parse(json!({ "name": "A", "earned": 5, "possible": 10, "status": "excluded" }));
+    let i =
+        parse(json!({ "name": "A", "earnedPoints": 5, "totalPoints": 10, "status": "excluded" }));
     assert_eq!(i.status, Status::Excluded);
-    let i = parse(json!({ "name": "A", "earned": null, "possible": 10, "status": "excluded" }));
+    let i = parse(
+        json!({ "name": "A", "earnedPoints": null, "totalPoints": 10, "status": "excluded" }),
+    );
     assert_eq!(i.status, Status::Excluded);
     // Anything else is recomputed from the score, whatever was sent.
-    let i = parse(json!({ "name": "A", "earned": null, "possible": 10, "status": "counted" }));
+    let i =
+        parse(json!({ "name": "A", "earnedPoints": null, "totalPoints": 10, "status": "counted" }));
     assert_eq!(i.status, Status::Ungraded);
-    let i = parse(json!({ "name": "A", "earned": 3, "possible": 10, "status": "dropped" }));
+    let i =
+        parse(json!({ "name": "A", "earnedPoints": 3, "totalPoints": 10, "status": "dropped" }));
     assert_eq!(i.status, Status::Counted);
-    let i = parse(json!({ "name": "A", "earned": 3, "possible": 10 }));
+    let i = parse(json!({ "name": "A", "earnedPoints": 3, "totalPoints": 10 }));
     assert_eq!(i.status, Status::Counted);
 
     // Ungraded is an explicit null, so it survives a round trip.
     let v = serde_json::to_value(item(None, 10.0)).unwrap();
-    assert_eq!(v["earned"], serde_json::Value::Null);
+    assert_eq!(v["earnedPoints"], serde_json::Value::Null);
     assert_eq!(v["status"], "ungraded");
 }
 
 #[test]
 fn rejects_items_without_points_possible() {
-    assert!(serde_json::from_value::<Item>(json!({ "name": "?", "earned": 5 })).is_err());
+    assert!(serde_json::from_value::<Item>(json!({ "name": "?", "earnedPoints": 5 })).is_err());
 }
 
 #[test]
 fn a_missing_status_defaults_to_ungraded_until_graded() {
     let i: Item =
-        serde_json::from_value(json!({ "name": "Q", "earned": 3, "possible": 10 })).unwrap();
+        serde_json::from_value(json!({ "name": "Q", "earnedPoints": 3, "totalPoints": 10 }))
+            .unwrap();
     assert_eq!(i.status, Status::Ungraded);
     assert_eq!(
-        parse(json!({ "name": "Q", "earned": 3, "possible": 10 })).status,
+        parse(json!({ "name": "Q", "earnedPoints": 3, "totalPoints": 10 })).status,
         Status::Counted
     );
 }
