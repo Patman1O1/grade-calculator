@@ -1,7 +1,5 @@
 //! [`Category`]: a group of items with optional drop rules and a weight.
 
-use std::cmp::Ordering;
-
 use serde::{Deserialize, Serialize};
 
 use crate::item::Item;
@@ -74,6 +72,11 @@ impl Category {
         }
     }
 
+    /// Whether the category has a drop-lowest or drop-highest rule that drops anything.
+    pub fn has_drop_rules(&self) -> bool {
+        drop_count(self.drop_lowest) > 0 || drop_count(self.drop_highest) > 0
+    }
+
     /// Apply drop-lowest, then drop-highest, to the graded items.
     fn apply_drops(&mut self) {
         let drop_lowest = drop_count(self.drop_lowest);
@@ -82,44 +85,38 @@ impl Category {
             return;
         }
 
+        // Indexes (into `items`) of the graded, droppable items.
+        let mut pool: Vec<usize> = Vec::new();
         let (mut fixed_earned, mut fixed_possible, mut fixed_count) = (0.0, 0.0, 0usize);
-        let mut pool: Vec<Candidate> = Vec::new();
         for (index, item) in self.items.iter().enumerate() {
             if !item.status.is_counted() {
                 continue;
             }
-            let (earned, possible) = points(item);
             if item.never_drop {
+                let (earned, possible) = points(item);
                 fixed_earned += earned;
                 fixed_possible += possible;
                 fixed_count += 1;
             } else {
-                pool.push(Candidate {
-                    index,
-                    earned,
-                    possible,
-                });
+                pool.push(index);
             }
         }
         // Like Canvas, never drop every item: at least one stays.
         let min_keep = if fixed_count > 0 { 0 } else { 1 };
 
+        let mut scratch = Vec::with_capacity(pool.len());
         for (drops, mode) in [(drop_lowest, Mode::Max), (drop_highest, Mode::Min)] {
             let drops = drops.min(pool.len().saturating_sub(min_keep));
             if drops > 0 {
-                let kept = choose_kept(
-                    &pool,
-                    pool.len() - drops,
-                    fixed_earned,
-                    fixed_possible,
-                    mode,
-                );
-                pool.retain(|c| kept.contains(&c.index));
+                let keep = pool.len() - drops;
+                let fixed = (fixed_earned, fixed_possible);
+                choose_kept(&self.items, &mut pool, keep, fixed, mode, &mut scratch);
             }
         }
 
+        // `pool` is now the kept items, in ascending order.
         for (index, item) in self.items.iter_mut().enumerate() {
-            if item.status.is_counted() && !pool.iter().any(|c| c.index == index) {
+            if item.status.is_counted() && pool.binary_search(&index).is_err() {
                 // `drop` refuses never-drop items, which are never in the pool anyway.
                 item.drop();
             }
@@ -140,15 +137,6 @@ fn drop_count(n: Option<f64>) -> usize {
     }
 }
 
-/// A graded, droppable item in the drop search.
-#[derive(Debug, Clone, Copy)]
-struct Candidate {
-    /// Index into `Category::items`.
-    index: usize,
-    earned: f64,
-    possible: f64,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     /// Keep the set with the highest ratio (i.e. drop the lowest).
@@ -157,91 +145,114 @@ enum Mode {
     Min,
 }
 
-/// Choose which `keep` candidates to keep so that
-/// `(fixed_earned + Σ earned) / (fixed_possible + Σ possible)`
-/// is maximised ([`Mode::Max`]) or minimised ([`Mode::Min`]).
+/// Narrow `pool` (indexes into `items`) to the `keep` items whose
+/// `(fixed_earned + Σ earned) / (fixed_possible + Σ possible)` is the highest
+/// ([`Mode::Max`]) or lowest ([`Mode::Min`]), leaving them in ascending order.
 ///
 /// When items are worth different amounts, "drop the lowest percentage" is not
-/// always optimal. Canvas solves this exactly with a parametric search on the
-/// resulting ratio q: a ratio q is achievable iff the best `keep` values of
-/// `earned − q·possible` sum to at least `−(fixed_earned − q·fixed_possible)`.
-/// We do the same, so results match Canvas for any mix of point values.
+/// always optimal. For a ratio q, the best set is the `keep` items with the
+/// largest `earned − q·possible`, and q is optimal exactly when that set's
+/// own ratio is q. Dinkelbach's method finds it: start from any q, take the
+/// best set for q, move q to that set's ratio, and repeat until q stops
+/// improving (usually 2–5 rounds). This is the same optimum Canvas finds, so
+/// results match Canvas for any mix of point values. Among sets that tie for
+/// the best ratio, the one keeping the earlier items wins.
 ///
-/// Returns the indexes (into the item list) of the kept candidates.
+/// `scratch` is a reusable buffer for the scores.
 fn choose_kept(
-    candidates: &[Candidate],
+    items: &[Item],
+    pool: &mut Vec<usize>,
     keep: usize,
-    fixed_earned: f64,
-    fixed_possible: f64,
+    (fixed_earned, fixed_possible): (f64, f64),
     mode: Mode,
-) -> Vec<usize> {
-    if keep >= candidates.len() {
-        return candidates.iter().map(|c| c.index).collect();
+    scratch: &mut Vec<(usize, f64)>,
+) {
+    if keep >= pool.len() {
+        return;
     }
     if keep == 0 {
-        return Vec::new();
+        pool.clear();
+        return;
     }
 
     let sign = if mode == Mode::Max { 1.0 } else { -1.0 };
-    // The `keep` best candidates for a given q, with their values.
-    let pick = |q: f64| -> Vec<(usize, f64)> {
-        let mut scored: Vec<(usize, f64)> = candidates
+    // The `keep` best items for ratio q (largest `sign·(earned − q·possible)`
+    // first, ties keeping the earlier item), with their total points.
+    let mut pick = |q: f64, picked: &mut Vec<usize>| -> (f64, f64) {
+        scratch.clear();
+        scratch.extend(pool.iter().map(|&i| {
+            let (earned, possible) = points(&items[i]);
+            (i, sign * (earned - q * possible))
+        }));
+        let order = |a: &(usize, f64), b: &(usize, f64)| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0));
+        scratch.select_nth_unstable_by(keep - 1, order);
+        picked.clear();
+        picked.extend(scratch[..keep].iter().map(|&(i, _)| i));
+        picked
             .iter()
-            .map(|c| (c.index, sign * (c.earned - q * c.possible)))
-            .collect();
-        // Highest value first; stable tie-break prefers keeping earlier items.
-        scored.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(Ordering::Equal)
-                .then(a.0.cmp(&b.0))
-        });
-        scored.truncate(keep);
-        scored
+            .fold((fixed_earned, fixed_possible), |(e, p), &i| {
+                let (earned, possible) = points(&items[i]);
+                (e + earned, p + possible)
+            })
     };
-    let feasible = |q: f64| {
-        let picked: f64 = pick(q).iter().map(|(_, v)| v).sum();
-        sign * (fixed_earned - q * fixed_possible) + picked >= 0.0
-    };
-    let indexes = |picked: Vec<(usize, f64)>| picked.into_iter().map(|(i, _)| i).collect();
 
-    let min_positive = std::iter::once(fixed_possible)
-        .chain(candidates.iter().map(|c| c.possible))
-        .filter(|p| *p > 0.0)
-        .fold(f64::INFINITY, f64::min);
-    if !min_positive.is_finite() {
+    let all_possible = fixed_possible + pool.iter().map(|&i| items[i].total_points).sum::<f64>();
+    if all_possible <= 0.0 {
         // Nothing has a denominator: only extra credit, so keep the largest (or smallest) scores.
-        return indexes(pick(0.0));
+        let mut picked = Vec::with_capacity(keep);
+        pick(0.0, &mut picked);
+        *pool = picked;
+        pool.sort_unstable();
+        return;
     }
 
-    let total_earned = fixed_earned + candidates.iter().map(|c| c.earned.max(0.0)).sum::<f64>();
-    let mut lo = 0.0;
-    let mut hi = total_earned / min_positive + 1.0;
-    match mode {
-        Mode::Max => {
-            // Largest achievable q.
-            for _ in 0..200 {
-                let mid = (lo + hi) / 2.0;
-                if feasible(mid) {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
+    // Start from the ratio with every item kept.
+    let all_earned = fixed_earned + pool.iter().map(|&i| points(&items[i]).0).sum::<f64>();
+    let mut q = all_earned / all_possible;
+    let mut best: Vec<usize> = Vec::with_capacity(keep);
+    let mut next: Vec<usize> = Vec::with_capacity(keep);
+    for round in 0..64 {
+        let (earned, possible) = pick(q, &mut next);
+        if possible <= 0.0 {
+            // Only zero-point items picked, so the ratio is undefined: take the
+            // set if it's the first, or if it earned points while maximising
+            // (an unbeatable ratio), and stop.
+            if round == 0 || (mode == Mode::Max && earned > 0.0) {
+                std::mem::swap(&mut best, &mut next);
             }
-            indexes(pick(lo))
+            break;
         }
-        Mode::Min => {
-            // Smallest achievable q (feasible means "ratio ≤ q is reachable").
-            for _ in 0..200 {
-                let mid = (lo + hi) / 2.0;
-                if feasible(mid) {
-                    hi = mid;
-                } else {
-                    lo = mid;
-                }
-            }
-            indexes(pick(hi))
+        let ratio = earned / possible;
+        let improved = match mode {
+            Mode::Max => ratio > q + 1e-12 * q.abs().max(1.0),
+            Mode::Min => ratio < q - 1e-12 * q.abs().max(1.0),
+        };
+        if round > 0 && !improved {
+            break;
+        }
+        std::mem::swap(&mut best, &mut next);
+        q = ratio;
+    }
+
+    // Several sets can tie for the best ratio (keeping 5/10 or 10/20 is 50%
+    // either way) yet count different points, which matters to a
+    // points-scheme course. The set picked at exactly the best ratio breaks
+    // such ties by keeping the earlier items, so use it if it still reaches
+    // that ratio.
+    let (earned, possible) = pick(q, &mut next);
+    if possible > 0.0 {
+        let ratio = earned / possible;
+        let slack = 1e-12 * q.abs().max(1.0);
+        let reaches = match mode {
+            Mode::Max => ratio >= q - slack,
+            Mode::Min => ratio <= q + slack,
+        };
+        if reaches {
+            std::mem::swap(&mut best, &mut next);
         }
     }
+    best.sort_unstable();
+    *pool = best;
 }
 
 #[cfg(test)]

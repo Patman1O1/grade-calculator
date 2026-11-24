@@ -62,12 +62,12 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 | **Earned / Total Points** | Each item has two fields next to its name: **Earned Points** (leave blank until it's graded) and **Total Points**. To enter a percentage, use a total of 100. |
 | **Points set weight** | Within a category, items count in proportion to their total points: a 10-point quiz counts a tenth as much as a 100-point exam. To make a 0–100 report count 10 points, enter it scaled (85/100 → 8.5 / 10). |
 | **Excluded** | The item is shown but does not count (for example Canvas "does not count toward final grade" items, or sub-scores). Stored as the item's `status: "excluded"`. |
-| **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. Items marked *Keep* are never dropped. |
+| **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. When two choices give the same result, the earlier item is kept. Items marked *Keep* are never dropped. |
 | **Total points** | Course % = sum of points earned / sum of points possible over all categories. |
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
 | **Letter scale** | Every course has the letters A, B, C, D and F, each with a minimum % (90/80/70/60/0 on a new course) that can be changed. A course % gets the letter with the highest minimum it reaches. |
 
-Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item/mod.rs`](backend/src/item/mod.rs) scales scores, [`category/mod.rs`](backend/src/category/mod.rs) applies drop rules, and [`course/mod.rs`](backend/src/course/mod.rs) combines categories and solves "what do I need?", and [`scale/mod.rs`](backend/src/scale/mod.rs) turns the course % into a letter.
+Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item/mod.rs`](backend/src/item/mod.rs) scales scores, [`category/mod.rs`](backend/src/category/mod.rs) applies drop rules, [`course/mod.rs`](backend/src/course/mod.rs) combines categories and solves "what do I need?", and [`scale/mod.rs`](backend/src/scale/mod.rs) turns the course % into a letter.
 
 ## Verification against `docs/`
 

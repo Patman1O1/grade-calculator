@@ -115,3 +115,52 @@ fn finds_the_average_needed_on_remaining_work() {
     );
     assert_eq!(done.needed_on_remaining(80.0), Needed::NoRemaining);
 }
+
+/// Course percentage with every remaining item at `fraction` of its points.
+fn percent_at(c: &Course, fraction: f64) -> f64 {
+    c.with_remaining_at(fraction).graded().percent.unwrap()
+}
+
+#[test]
+fn solves_without_drop_rules_exactly() {
+    // 60/100 so far and 100 points left: 70% overall needs 80/100.
+    let c = course(
+        Scheme::Points,
+        vec![cat(0.0, vec![item(Some(60.0), 100.0), item(None, 100.0)])],
+    );
+    let Needed::Needs { fraction } = c.needed_on_remaining(70.0) else {
+        panic!("expected needs")
+    };
+    assert!((fraction - 0.8).abs() < 1e-9);
+}
+
+#[test]
+fn solves_with_drop_rules_for_several_targets() {
+    // Drop-lowest decides which items count, so the grade isn't a straight line.
+    let mut quizzes = cat(
+        40.0,
+        vec![
+            item(Some(4.0), 10.0),
+            item(Some(9.0), 10.0),
+            item(None, 10.0),
+            item(None, 20.0),
+        ],
+    );
+    quizzes.drop_lowest = Some(1.0);
+    let exams = cat(60.0, vec![item(Some(70.0), 100.0), item(None, 100.0)]);
+    let c = course(Scheme::Weighted, vec![quizzes, exams]);
+
+    let targets = [90.0, 80.0, 70.0, 60.0];
+    let needs = c.needs(&targets);
+    assert_eq!(needs.len(), targets.len());
+    for (&target, need) in targets.iter().zip(&needs) {
+        assert_eq!(*need, c.needed_on_remaining(target));
+        let Needed::Needs { fraction } = *need else {
+            panic!("expected needs for {target}, got {need:?}")
+        };
+        // The smallest fraction that reaches the target.
+        assert!(percent_at(&c, fraction) + 1e-9 >= target);
+        assert!(percent_at(&c, fraction - 1e-6) < target);
+    }
+    assert_eq!(c.needs(&[]), []);
+}

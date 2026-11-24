@@ -26,6 +26,24 @@ export async function loadEngine(): Promise<void> {
 }
 
 /**
+ * Summaries already worked out, by course object. Courses are never edited in
+ * place (`updateCourse` replaces the edited one with a copy), so a course
+ * object's summary never goes stale, and on each edit only the edited course
+ * needs grading again.
+ */
+const summaryCache = new WeakMap<Course, CourseSummary>()
+
+/** Each course's summary, asking the engine only about courses not seen before. */
+function summaries(courses: Course[]): CourseSummary[] {
+  const missing = courses.filter((c) => !summaryCache.has(c))
+  if (missing.length > 0) {
+    const results: CourseSummary[] = wasm.summaries(missing)
+    missing.forEach((c, i) => summaryCache.set(c, results[i]))
+  }
+  return courses.map((c) => summaryCache.get(c)!)
+}
+
+/**
  * The engine works on plain course data and knows nothing about ids, so
  * every course coming back from it gets its ids here.
  */
@@ -34,8 +52,8 @@ export const engine = {
   blankCourse: (): Course => withIds(wasm.blankCourse()),
   /** Grade a course and solve "what do I need?" for each target percentage. */
   evaluate: (course: Course, targets: number[]): Evaluation => wasm.evaluate(course, targets),
-  /** Each course's overall grade, in the same order as `courses`. */
-  summaries: (courses: Course[]): CourseSummary[] => wasm.summaries(courses),
+  /** Each course's overall grade, in the same order as `courses`. Cached per course object. */
+  summaries,
   /** Validate parsed JSON (one course or a list) and get its courses with new ids. Throws if it has no course. */
   importCourses: (data: unknown): Course[] => (wasm.importCourses(data) as EngineCourse[]).map(withIds),
 }

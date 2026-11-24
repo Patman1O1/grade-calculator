@@ -104,9 +104,18 @@ impl Course {
     /// in the course's `earned`, `possible`, `percent` and `letter`.
     pub fn grade(&mut self) {
         self.categories.iter_mut().for_each(Category::grade);
+        let (earned, possible) = self.totals();
+        let percent = (possible > 0.0).then(|| earned / possible * 100.0);
+        self.earned = Some(earned);
+        self.possible = Some(possible);
+        self.percent = percent;
+        self.letter = self.letter_for(percent);
+    }
+
+    /// The course's `(earned, possible)` from its already-graded categories.
+    fn totals(&self) -> (f64, f64) {
         let mut earned = 0.0;
         let mut possible = 0.0;
-
         match self.scheme {
             Scheme::Points => {
                 for c in &self.categories {
@@ -129,12 +138,7 @@ impl Course {
                 }
             }
         }
-
-        let percent = (possible > 0.0).then(|| earned / possible * 100.0);
-        self.earned = Some(earned);
-        self.possible = Some(possible);
-        self.percent = percent;
-        self.letter = self.letter_for(percent);
+        (earned, possible)
     }
 
     /// A graded copy of the course.
@@ -174,27 +178,121 @@ impl Course {
     /// to finish at or above `target` percent. "Impossible" means even 100%
     /// everywhere falls short.
     pub fn needed_on_remaining(&self, target: f64) -> Needed {
-        if self.remaining_count() == 0 {
-            return Needed::NoRemaining;
+        let mut needs = self.needs(&[target]);
+        needs.pop().unwrap_or(Needed::NoRemaining)
+    }
+
+    /// [`Course::needed_on_remaining`] for several targets at once, sharing
+    /// the work between them. One result per target, in the same order.
+    pub fn needs(&self, targets: &[f64]) -> Vec<Needed> {
+        let Some(mut solver) = Solver::new(self) else {
+            return vec![Needed::NoRemaining; targets.len()];
+        };
+        let at_zero = solver.percent_at(0.0);
+        let at_full = solver.percent_at(1.0);
+        targets
+            .iter()
+            .map(|&target| {
+                // The tolerance lets 89.99999999 from floating point count as 90.
+                let goal = target - TOLERANCE;
+                if at_zero >= goal {
+                    Needed::Secured
+                } else if at_full < goal {
+                    Needed::Impossible {
+                        best: Some(at_full),
+                    }
+                } else if solver.linear {
+                    Needed::Needs {
+                        fraction: ((goal - at_zero) / (at_full - at_zero)).clamp(0.0, 1.0),
+                    }
+                } else {
+                    // The smallest fraction that reaches the goal (the grade
+                    // never falls as the fraction rises).
+                    let (mut lo, mut hi) = (0.0, 1.0);
+                    for _ in 0..BISECTION_STEPS {
+                        let mid = (lo + hi) / 2.0;
+                        if solver.percent_at(mid) >= goal {
+                            hi = mid;
+                        } else {
+                            lo = mid;
+                        }
+                    }
+                    Needed::Needs { fraction: hi }
+                }
+            })
+            .collect()
+    }
+}
+
+/// How far below a target a grade may fall and still count as reaching it.
+const TOLERANCE: f64 = 1e-9;
+
+/// Halvings of [0, 1] when solving with drop rules: 2⁻⁴⁰ ≈ 1e-12, far below
+/// anything displayed.
+const BISECTION_STEPS: u32 = 40;
+
+/// The course's grade as a function of the fraction scored on the remaining
+/// work, for [`Course::needs`]. Only the categories with remaining work change
+/// with the fraction, so only they are regraded.
+struct Solver {
+    /// Working copy of the course, every category graded.
+    course: Course,
+    /// Each category with remaining work, and the indexes of those items.
+    affected: Vec<(usize, Vec<usize>)>,
+    /// No affected category has drop rules, so the grade is linear in the
+    /// fraction: each affected category's percentage is
+    /// `(earned + fraction · remaining) / possible` with a fixed `possible`,
+    /// and the set of graded categories doesn't change.
+    linear: bool,
+}
+
+impl Solver {
+    /// `None` when nothing is left to grade.
+    fn new(course: &Course) -> Option<Solver> {
+        let affected: Vec<(usize, Vec<usize>)> = course
+            .categories
+            .iter()
+            .enumerate()
+            .filter_map(|(c, category)| {
+                let items: Vec<usize> = (category.items.iter().enumerate())
+                    .filter(|(_, item)| is_remaining(item))
+                    .map(|(i, _)| i)
+                    .collect();
+                (!items.is_empty()).then_some((c, items))
+            })
+            .collect();
+        if affected.is_empty() {
+            return None;
         }
-        let at = |f: f64| self.with_remaining_at(f).graded().percent.unwrap_or(0.0);
-        if at(0.0) + 1e-9 >= target {
-            return Needed::Secured;
-        }
-        let best = at(1.0);
-        if best + 1e-9 < target {
-            return Needed::Impossible { best: Some(best) };
-        }
-        let (mut lo, mut hi) = (0.0, 1.0);
-        for _ in 0..60 {
-            let mid = (lo + hi) / 2.0;
-            if at(mid) + 1e-9 >= target {
-                hi = mid;
-            } else {
-                lo = mid;
+        let linear = !affected
+            .iter()
+            .any(|&(c, _)| course.categories[c].has_drop_rules());
+        let mut course = course.clone();
+        course.categories.iter_mut().for_each(Category::grade);
+        Some(Solver {
+            course,
+            affected,
+            linear,
+        })
+    }
+
+    /// Course percentage (0 when undefined) with every remaining item scored at
+    /// `fraction` of its points.
+    fn percent_at(&mut self, fraction: f64) -> f64 {
+        for (c, items) in &self.affected {
+            let category = &mut self.course.categories[*c];
+            for &i in items {
+                let item = &mut category.items[i];
+                item.earned_points = Some(item.total_points * fraction);
             }
+            category.grade();
         }
-        Needed::Needs { fraction: hi }
+        let (earned, possible) = self.course.totals();
+        if possible > 0.0 {
+            earned / possible * 100.0
+        } else {
+            0.0
+        }
     }
 }
 

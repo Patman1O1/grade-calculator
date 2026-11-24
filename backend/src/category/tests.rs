@@ -140,3 +140,37 @@ fn reset_statuses_keeps_excluded_and_recomputes_the_rest() {
         ]
     );
 }
+
+#[test]
+fn breaks_ties_by_keeping_the_earlier_items() {
+    // Keeping either item is 50%, but they count different points.
+    let c = graded(
+        vec![item(Some(5.0), 10.0), item(Some(10.0), 20.0)],
+        1.0,
+        0.0,
+    );
+    assert_eq!(dropped(&c), [false, true]);
+    assert_eq!((c.earned, c.possible), (Some(5.0), Some(10.0)));
+}
+
+#[test]
+fn keeps_a_real_score_over_a_zero_point_item() {
+    // Keeping only the 0/0 would leave the category with no percentage.
+    let c = graded(
+        vec![item(Some(100.0), 100.0), item(Some(0.0), 0.0)],
+        1.0,
+        0.0,
+    );
+    assert_eq!(dropped(&c), [false, true]);
+    assert_eq!(c.percent, Some(100.0));
+}
+
+#[test]
+fn has_drop_rules_only_when_a_rule_drops_something() {
+    let mut c = Category::default();
+    assert!(!c.has_drop_rules());
+    c.drop_lowest = Some(0.5);
+    assert!(!c.has_drop_rules());
+    c.drop_highest = Some(1.0);
+    assert!(c.has_drop_rules());
+}

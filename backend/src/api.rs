@@ -34,10 +34,8 @@ pub fn evaluate(course: &Course, targets: &[f64]) -> Evaluation {
         remaining: course.remaining_count(),
         needs: targets
             .iter()
-            .map(|&target| TargetNeed {
-                target,
-                needed: course.needed_on_remaining(target),
-            })
+            .zip(course.needs(targets))
+            .map(|(&target, needed)| TargetNeed { target, needed })
             .collect(),
     }
 }
