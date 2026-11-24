@@ -95,8 +95,10 @@ mod item {
             let mut i = item(Some(3.0), 10.0);
             i.status = Status::Counted;
             assert_eq!(i.ungrade(), (Some(3.0), 10.0));
-            assert_eq!((i.earned_points, i.total_points), (None, 0.0));
+            // Only the score is cleared; the item is still out of 10.
+            assert_eq!((i.earned_points, i.total_points), (None, 10.0));
             assert_eq!(i.status, Status::Ungraded);
+            assert_eq!(i.percent(), None);
         }
 
         // ── `grade()` Tests ─────────────────────────────────────────────────
