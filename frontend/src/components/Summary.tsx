@@ -103,7 +103,7 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
             <table className="needs">
               <tbody>
                 {targets.map((t) => (
-                  <tr key={t.letter + t.min}>
+                  <tr key={t.grade}>
                     <th>
                       {t.letter} <small>≥ {round(t.min, 2)}%</small>
                     </th>

@@ -25,7 +25,8 @@ flowchart LR
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
     NumberInput["components/NumberInput.tsx"]
-    coursets["course.ts<br/>Course, Scheme, Cutoff, Needed, CourseSummary, Mutate"]
+    coursets["course.ts<br/>Course, Scheme, Needed, CourseSummary, Mutate"]
+    scalets["scale.ts<br/>Scale, Cutoff"]
     categoryts["category.ts<br/>Category"]
     itemts["item.ts<br/>Item"]
     statusts["status.ts<br/>Status"]
@@ -39,8 +40,9 @@ flowchart LR
     api["api.rs<br/>evaluate, summaries, import"]
     item["item/mod.rs<br/>Item"]
     status["status/mod.rs<br/>Status"]
+    scale["scale/mod.rs<br/>Scale"]
     category["category/mod.rs<br/>Category + drop search"]
-    course["course/mod.rs<br/>Course, Scheme, Cutoff, Needed"]
+    course["course/mod.rs<br/>Course, Scheme, Needed"]
   end
 
   main --> App
@@ -58,16 +60,19 @@ flowchart LR
   CourseEditor --> itemts
   Summary --> coursets
   coursets --> categoryts --> itemts --> statusts
+  coursets --> scalets
+  CourseEditor --> scalets
   CourseEditor --> statusts
   glue -->|"calls (JS objects via serde-wasm-bindgen)"| wasm
   wasm --> api
   api --> course
   course -->|grades| category
+  course -->|letter| scale
   category -->|grades| item
   item --> status
 ```
 
-## 2. Domain model and grading (`backend/src/item/mod.rs`, `category/mod.rs`, `course/mod.rs`; mirrored in `frontend/src/item.ts`, `category.ts`, `course.ts`)
+## 2. Domain model and grading (`backend/src/item/mod.rs`, `category/mod.rs`, `course/mod.rs`, `scale/mod.rs`; mirrored in `frontend/src/item.ts`, `category.ts`, `course.ts`, `scale.ts`)
 
 A `Course` owns its categories and letter scale, and each `Category` owns its items. Each type lives in its own module together with the logic that grades it, and the grade lives on the same types: the fields marked `/` are filled in by `grade()`. `Course::grade` grades each category, and `Category::grade` grades each item and then applies its drop rules.
 
@@ -84,7 +89,7 @@ classDiagram
     +name: String
     +scheme: Scheme
     +categories: Vec~Category~
-    +scale: Vec~Cutoff~
+    +scale: Scale
     +displayDecimals?: u32
     +notes?: String
     +/earned?: f64
@@ -129,10 +134,16 @@ classDiagram
     +status(&self) Status
     +percent(&self) Option~f64~
   }
-  class Cutoff {
+  class Scale {
     <<struct>>
-    +letter: String
-    +min: f64
+    +a: f64
+    +b: f64
+    +c: f64
+    +d: f64
+    +f: f64
+    +STANDARD: Scale$
+    +cutoffs(&self) [&str × f64; 5]
+    +letter_for(&self, percent: Option~f64~) Option~&str~
   }
   class Status {
     <<enum>>
@@ -147,7 +158,7 @@ classDiagram
   }
   Course "1" *-- "0..*" Category : categories
   Category "1" *-- "0..*" Item : items
-  Course "1" *-- "0..*" Cutoff : scale
+  Course "1" *-- "1" Scale : scale
   Course --> "1" Scheme : scheme
   Item --> "1" Status : status
   Course ..> Needed : needed_on_remaining
@@ -239,11 +250,11 @@ classDiagram
     <<struct>>
     +blank()$ Course
   }
-  class course {
-    <<module>>
-    +standard_scale()$ Vec~Cutoff~
+  class Scale {
+    <<struct>>
+    +STANDARD: Scale$
   }
-  Course ..> course : standard_scale
+  Course ..> Scale : STANDARD
 ```
 
 `Course::blank` is the starting point behind the app's **New** button: weighted, a Homework and an Exams category with one ungraded item each, and the standard 90/80/70/60 scale.
@@ -386,7 +397,7 @@ classDiagram
   direction LR
   class course {
     <<module>>
-    +Course, Scheme, Cutoff, Needed, CourseSummary, Mutate
+    +Course, Scheme, Needed, CourseSummary, Mutate
     +decimals(course)$ number
     +letterTargets(course)$ Cutoff[]
     +targets(course, custom)$ number[]
@@ -417,6 +428,14 @@ classDiagram
     +EngineItem
     +withItemId(item)$ Item
   }
+  class scale {
+    <<module>>
+    +Scale
+    +Grade
+    +GRADES$: Grade[]
+    +Cutoff
+    +cutoffs(scale)$ Cutoff[]
+  }
   class status {
     <<module>>
     +Status
@@ -425,6 +444,7 @@ classDiagram
     +rowClass(status)$ string
   }
   course ..> category : Category
+  course ..> scale : Scale, cutoffs
   category ..> item : Item, newItem
   item ..> status : Status, forScore
 ```

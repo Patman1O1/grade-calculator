@@ -4,11 +4,11 @@ import {
   totalWeight as totalWeightOf,
   type Course,
   type EngineCourse,
-  type Cutoff,
   type Mutate,
 } from '../course'
 import { formatNumber, formatPercent } from '../format'
 import { percentOf, setEarnedPoints, setExcluded } from '../item'
+import { cutoffs } from '../scale'
 import { rowClass } from '../status'
 import { NumberInput } from './NumberInput'
 
@@ -257,7 +257,7 @@ export function CourseEditor({ course, graded, mutate }: Props) {
 
 /** The letter grades are fixed; only each letter's minimum % can be changed. */
 function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
-  const rows: Cutoff[] = course.scale
+  const rows = cutoffs(course.scale)
   return (
     <section className="panel scale">
       <header className="category-head">
@@ -271,8 +271,8 @@ function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={i}>
+          {rows.map((row) => (
+            <tr key={row.grade}>
               <td className="name">
                 <span className="letter-label">{row.letter}</span>
               </td>
@@ -282,7 +282,7 @@ function ScaleEditor({ course, mutate }: { course: Course; mutate: Mutate }) {
                   className="num"
                   nullable={false}
                   value={Number(row.min.toFixed(4))}
-                  onChange={(v) => mutate((d) => void (d.scale[i].min = v ?? 0))}
+                  onChange={(v) => mutate((d) => void (d.scale[row.grade] = v ?? 0))}
                 />
               </td>
             </tr>

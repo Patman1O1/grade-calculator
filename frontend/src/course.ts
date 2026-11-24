@@ -5,23 +5,18 @@
  */
 import { withCategoryIds, type Category, type EngineCategory } from './category'
 import { formatPercent, newId, round } from './format'
+import { cutoffs, type Cutoff, type Scale } from './scale'
 
 /** How a course combines its categories. */
 export type Scheme = 'points' | 'weighted'
-
-export interface Cutoff {
-  letter: string
-  /** Minimum percentage (0–100) needed for this letter. */
-  min: number
-}
 
 export interface Course {
   id: string
   name: string
   scheme: Scheme
   categories: Category[]
-  /** Letter-grade cutoffs; order does not matter. */
-  scale: Cutoff[]
+  /** Letter-grade cutoffs. */
+  scale: Scale
   /** Decimal places the course's own gradebook shows for percentages. */
   displayDecimals?: number
   notes?: string
@@ -68,7 +63,9 @@ export function decimals(course: Course): number {
 
 /** Letters with a minimum above 0, highest first: the targets worth solving for. */
 export function letterTargets(course: Course): Cutoff[] {
-  return course.scale.filter((c) => c.min > 0).sort((a, b) => b.min - a.min)
+  return cutoffs(course.scale)
+    .filter((c) => c.min > 0)
+    .sort((a, b) => b.min - a.min)
 }
 
 /** Target percentages for `engine.evaluate`: each letter's minimum, then `custom` if set. */

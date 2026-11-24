@@ -18,7 +18,10 @@ fn blank_course_is_ungraded() {
     assert_eq!(course["name"], "New course");
     assert_eq!(course["scheme"], "weighted");
     assert_eq!(course["categories"].as_array().unwrap().len(), 2);
-    assert_eq!(course["scale"][0], json!({ "letter": "A", "min": 90.0 }));
+    assert_eq!(
+        course["scale"],
+        json!({ "a": 90.0, "b": 80.0, "c": 70.0, "d": 60.0, "f": 0.0 })
+    );
     // Ids belong to the front-end; the engine has none.
     assert!(course.get("id").is_none());
     assert!(course["categories"][0].get("id").is_none());
@@ -33,7 +36,7 @@ fn blank_course_is_ungraded() {
 fn evaluates_a_course_and_solves_targets() {
     let course: Course = serde_json::from_value(json!({
         "id": "c", "name": "Test", "scheme": "points",
-        "scale": [{ "letter": "A", "min": 90 }, { "letter": "F", "min": 0 }],
+        "scale": { "a": 90, "b": 80, "c": 70, "d": 65, "f": 0 },
         "categories": [{
             "id": "k", "name": "All", "weight": 0,
             "items": [
@@ -101,7 +104,7 @@ fn import_validates_courses_and_drops_ids() {
 
 #[test]
 fn computed_fields_in_input_are_recomputed() {
-    let forged = json!({ "name": "F", "scheme": "points", "scale": [], "percent": 100, "letter": "A",
+    let forged = json!({ "name": "F", "scheme": "points", "scale": { "a": 90, "b": 80, "c": 70, "d": 60, "f": 0 }, "percent": 100, "letter": "A",
         "categories": [{ "name": "C", "weight": 0, "earned": 99,
             "items": [
                 { "name": "I", "earnedPoints": 0, "totalPoints": 10, "status": "dropped" },
@@ -116,7 +119,7 @@ fn computed_fields_in_input_are_recomputed() {
 
     let graded = evaluate(&imported[0], &[]).course;
     assert_eq!(graded.percent, Some(0.0));
-    assert_eq!(graded.letter, None);
+    assert_eq!(graded.letter.as_deref(), Some("F"));
     assert_eq!(graded.categories[0].items[0].earned_points, Some(0.0));
     assert_eq!(graded.categories[0].items[0].status, Status::Counted);
     // The excluded item is kept out: 0/10, not 5/20.

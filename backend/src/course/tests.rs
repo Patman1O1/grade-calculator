@@ -25,7 +25,7 @@ fn course(scheme: Scheme, categories: Vec<Category>) -> Course {
         name: "x".into(),
         scheme,
         categories,
-        scale: standard_scale(),
+        scale: Scale::STANDARD,
         ..Default::default()
     }
 }
@@ -81,14 +81,14 @@ fn nothing_graded_has_no_percent_or_letter() {
 }
 
 #[test]
-fn maps_percentages_to_letters() {
-    let c = course(Scheme::Points, vec![]);
+fn maps_percentages_to_letters_on_its_scale() {
+    let mut c = course(Scheme::Points, vec![]);
     assert_eq!(c.letter_for(Some(89.99)).as_deref(), Some("B"));
     assert_eq!(c.letter_for(Some(90.0)).as_deref(), Some("A"));
     assert_eq!(c.letter_for(Some(-5.0)).as_deref(), Some("F"));
     assert_eq!(c.letter_for(None), None);
-    let no_scale = Course::default();
-    assert_eq!(no_scale.letter_for(Some(50.0)), None);
+    c.scale.a = 95.0;
+    assert_eq!(c.letter_for(Some(92.0)).as_deref(), Some("B"));
 }
 
 #[test]

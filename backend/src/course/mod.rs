@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::category::Category;
 use crate::item::Item;
+use crate::scale::Scale;
 use crate::status::Status;
 
 /// How a course combines its categories.
@@ -20,15 +21,6 @@ pub enum Scheme {
     /// (what Canvas and most syllabi do mid-semester).
     #[default]
     Weighted,
-}
-
-/// One letter of a course's scale.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Cutoff {
-    pub letter: String,
-    /// Minimum percentage (0–100) needed for this letter.
-    pub min: f64,
 }
 
 /// Average needed on the remaining work to reach a target.
@@ -51,8 +43,8 @@ pub struct Course {
     pub name: String,
     pub scheme: Scheme,
     pub categories: Vec<Category>,
-    /// Letter-grade cutoffs; order does not matter.
-    pub scale: Vec<Cutoff>,
+    /// Letter-grade cutoffs.
+    pub scale: Scale,
     /// Decimal places the course's own gradebook shows for percentages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_decimals: Option<u32>,
@@ -76,23 +68,6 @@ pub struct Course {
 /// "what do I need?" solves for.
 fn is_remaining(item: &Item) -> bool {
     item.earned_points.is_none() && !item.status.is_excluded() && item.total_points > 0.0
-}
-
-/// The usual 90/80/70/60 letter scale.
-pub fn standard_scale() -> Vec<Cutoff> {
-    [
-        ("A", 90.0),
-        ("B", 80.0),
-        ("C", 70.0),
-        ("D", 60.0),
-        ("F", 0.0),
-    ]
-    .into_iter()
-    .map(|(letter, min)| Cutoff {
-        letter: letter.to_owned(),
-        min,
-    })
-    .collect()
 }
 
 impl Course {
@@ -119,7 +94,7 @@ impl Course {
                 category("Homework", 40.0, "Homework 1", 10.0),
                 category("Exams", 60.0, "Midterm", 100.0),
             ],
-            scale: standard_scale(),
+            scale: Scale::STANDARD,
             display_decimals: Some(2),
             ..Default::default()
         }
@@ -169,18 +144,10 @@ impl Course {
         c
     }
 
-    /// Letter for a percentage on this course's scale: the highest cutoff it
-    /// reaches, or the lowest letter. `None` without a percentage or a scale.
+    /// Letter for a percentage on this course's scale (see
+    /// [`Scale::letter_for`]). `None` without a percentage.
     pub fn letter_for(&self, percent: Option<f64>) -> Option<String> {
-        let percent = percent?;
-        let mut sorted: Vec<&Cutoff> = self.scale.iter().collect();
-        sorted.sort_by(|a, b| b.min.partial_cmp(&a.min).unwrap_or(Ordering::Equal));
-        // Small tolerance so 89.99999999 from floating point still earns the 90 cutoff.
-        sorted
-            .iter()
-            .find(|c| percent + 1e-9 >= c.min)
-            .or(sorted.last())
-            .map(|c| c.letter.clone())
+        self.scale.letter_for(percent).map(str::to_owned)
     }
 
     /// Ungraded, non-excluded items that still have points available.

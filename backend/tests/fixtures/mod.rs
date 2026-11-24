@@ -6,9 +6,9 @@
 #![allow(dead_code)] // each test file uses a different subset
 
 use grade_calculator::category::Category;
-use grade_calculator::course::standard_scale;
-use grade_calculator::course::{Course, Cutoff, Scheme};
+use grade_calculator::course::{Course, Scheme};
 use grade_calculator::item::Item;
+use grade_calculator::scale::Scale;
 
 /// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
@@ -78,21 +78,11 @@ impl CategoryExt for Category {
     }
 }
 
-fn scale(cutoffs: &[(&str, f64)]) -> Vec<Cutoff> {
-    cutoffs
-        .iter()
-        .map(|(letter, min)| Cutoff {
-            letter: (*letter).to_owned(),
-            min: *min,
-        })
-        .collect()
-}
-
 fn course(
     name: &str,
     scheme: Scheme,
     decimals: u32,
-    scale: Vec<Cutoff>,
+    scale: Scale,
     notes: &str,
     categories: Vec<Category>,
 ) -> Course {
@@ -127,13 +117,13 @@ pub fn cs401() -> Course {
         "CS 401 – Computer Algorithms",
         Scheme::Points,
         2,
-        scale(&[
-            ("A", pct(360.0)),
-            ("B", pct(320.0)),
-            ("C", pct(280.0)),
-            ("D", pct(200.0)),
-            ("F", 0.0),
-        ]),
+        Scale {
+            a: pct(360.0),
+            b: pct(320.0),
+            c: pct(280.0),
+            d: pct(200.0),
+            f: 0.0,
+        },
         "Total-points course. Letter cutoffs are the syllabus point thresholds (360/320/280/200) expressed as a share of the 410 planned points. Late Days is tracked on Canvas but does not count toward the grade. Homework 6, Homework 7 and the Final Exam are planned in the syllabus but not yet on Canvas.",
         vec![
             category("Check-Ins", 0.0, check_ins),
@@ -196,7 +186,7 @@ pub fn cs411() -> Course {
         "CS 411 – Artificial Intelligence",
         Scheme::Weighted,
         2,
-        standard_scale(),
+        Scale::STANDARD,
         "Exams 1–3 are 8% each, so Exam 03 (out of 100 on Canvas) is entered as 50 points, like the other two exams; enter its score in points out of 50. Canvas pools exam points instead, which will diverge from the syllabus once Exam 03 is graded. The cumulative make-up exam (replaces one or two of Exams 1–3) is not modelled; edit the scores directly to try it. No letter scale in the syllabus, so 90/80/70/60 is used.",
         vec![
             category(
@@ -270,7 +260,7 @@ pub fn cs440() -> Course {
         "CS 440 – Intro to Software Engineering",
         Scheme::Points,
         1,
-        standard_scale(),
+        Scale::STANDARD,
         "Each Blackboard column is entered as its syllabus point value (a 0–100 report worth 10 points scoring 85 is 8.5 of 10). The 12 points for Weeklies, Reviews, Grammatical, OCL and Class Participation are all at full credit; the PDF pins down their total (67 possible) but not the exact split between Weeklies and Reviews, which doesn't change the grade. Attendance and the midterm/review sub-scores are informational only. Syllabus says letter breaks will be close to 90/80/70/60.",
         vec![
             category(
@@ -340,15 +330,13 @@ pub fn cs440() -> Course {
 // ---------------------------------------------------------------------------
 // Math 218 – Applied Linear Algebra
 // ---------------------------------------------------------------------------
-fn math218_scale() -> Vec<Cutoff> {
-    scale(&[
-        ("A", 87.0),
-        ("B", 75.0),
-        ("C", 60.0),
-        ("D", 45.0),
-        ("F", 0.0),
-    ])
-}
+const MATH218_SCALE: Scale = Scale {
+    a: 87.0,
+    b: 75.0,
+    c: 60.0,
+    d: 45.0,
+    f: 0.0,
+};
 
 fn math218_mom() -> Vec<Item> {
     vec![
@@ -381,7 +369,7 @@ pub fn math218() -> Course {
         "Math 218 – Applied Linear Algebra",
         Scheme::Weighted,
         2,
-        math218_scale(),
+        MATH218_SCALE,
         "Weighted per the syllabus (Canvas itself is set to total points, which counts the 65.39/0 Midsemester Score as extra points and shows 118.28%). Exams form one 70% category with items worth 20/20/30 points, so missing exams are projected at your exam average — the same method behind the posted Midsemester Score. Good attendance adds 5 points to the final exam score.",
         vec![
             category("MOM Homework (online)", 15.0, math218_mom()).drop_lowest(1),
@@ -416,7 +404,7 @@ pub fn math218_canvas() -> Course {
         "Math 218 – as Canvas computes it",
         Scheme::Points,
         2,
-        math218_scale(),
+        MATH218_SCALE,
         "Mirror of the Canvas gradebook setup: no weights, no drops, and the 0-point Midsemester Score is added as extra points. This reproduces the 118.28% Canvas shows, which is not a real course grade; see the syllabus-weighted Math 218 course for that.",
         vec![
             category("Written Homework group", 0.0, math218_written()),

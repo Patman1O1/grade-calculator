@@ -65,9 +65,9 @@ The built app is static files (HTML, JS, CSS and one `.wasm`), so it is hosted f
 | **Drop lowest / highest** | Drop rules are applied per category to graded items. When items are worth different amounts, the calculator drops whichever items maximize (or minimize) the result, the same way Canvas does, rather than just the lowest percentage. Items marked *Keep* are never dropped. |
 | **Total points** | Course % = sum of points earned / sum of points possible over all categories. |
 | **Weighted categories** | Course % = Σ weight × category % divided by Σ weight of categories that have graded work. Ungraded categories are rescaled out, as on Canvas. *Extra credit* categories add to the grade without adding to the denominator. |
-| **Letter scale** | Each letter has a minimum %. The letters themselves are fixed (A–F on a new course, or whatever an imported course has); only each letter's minimum can be changed. |
+| **Letter scale** | Every course has the letters A, B, C, D and F, each with a minimum % (90/80/70/60/0 on a new course) that can be changed. A course % gets the letter with the highest minimum it reaches. |
 
-Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item/mod.rs`](backend/src/item/mod.rs) scales scores, [`category/mod.rs`](backend/src/category/mod.rs) applies drop rules, and [`course/mod.rs`](backend/src/course/mod.rs) combines categories, assigns the letter and solves "what do I need?".
+Each type is graded by its own module in `backend/src/`, none of which depend on WebAssembly: [`item/mod.rs`](backend/src/item/mod.rs) scales scores, [`category/mod.rs`](backend/src/category/mod.rs) applies drop rules, and [`course/mod.rs`](backend/src/course/mod.rs) combines categories and solves "what do I need?", and [`scale/mod.rs`](backend/src/scale/mod.rs) turns the course % into a letter.
 
 ## Verification against `docs/`
 
