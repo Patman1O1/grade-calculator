@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 
 use crate::item::Item;
+use crate::status::Status;
 use crate::utils::is_false;
 
 /// A group of items (homework, exams, …). It may drop the lowest/highest
@@ -37,23 +38,40 @@ pub struct Category {
 }
 
 impl Category {
-    /// Grade the category in place: grades every item, applies the drop rules,
-    /// and fills in the category's `earned`, `possible` and `percent`.
+    /// Grade the category in place: resets every item's status from its
+    /// score, applies the drop rules, and fills in the category's `earned`,
+    /// `possible` and `percent`.
     pub fn grade(&mut self) {
-        self.items.iter_mut().for_each(Item::grade);
+        self.reset_statuses();
         self.apply_drops();
 
         let (earned, possible) =
             self.items
                 .iter()
-                .filter(|i| i.is_counted())
+                .filter(|i| i.status.is_counted())
                 .fold((0.0, 0.0), |(e, p), i| {
-                    let (earned, possible) = i.points();
+                    let (earned, possible) = points(i);
                     (e + earned, p + possible)
                 });
         self.earned = Some(earned);
         self.possible = Some(possible);
         self.percent = (possible > 0.0).then(|| earned / possible * 100.0);
+    }
+
+    /// Set every item's status from its score, before any drop rule: an
+    /// excluded item stays `Excluded` (the user's choice); any other becomes
+    /// `Counted` if it has a score and `Ungraded` if not. So a status read
+    /// from input is never trusted except `Excluded`.
+    pub fn reset_statuses(&mut self) {
+        for item in &mut self.items {
+            if item.status.is_excluded() {
+                continue;
+            }
+            match item.earned_points {
+                Some(earned) => item.grade(earned, item.total_points),
+                None => item.status = Status::Ungraded,
+            }
+        }
     }
 
     /// Apply drop-lowest, then drop-highest, to the graded items.
@@ -67,10 +85,10 @@ impl Category {
         let (mut fixed_earned, mut fixed_possible, mut fixed_count) = (0.0, 0.0, 0usize);
         let mut pool: Vec<Candidate> = Vec::new();
         for (index, item) in self.items.iter().enumerate() {
-            if !item.is_counted() {
+            if !item.status.is_counted() {
                 continue;
             }
-            let (earned, possible) = item.points();
+            let (earned, possible) = points(item);
             if item.never_drop {
                 fixed_earned += earned;
                 fixed_possible += possible;
@@ -101,11 +119,17 @@ impl Category {
         }
 
         for (index, item) in self.items.iter_mut().enumerate() {
-            if item.is_counted() && !item.never_drop && !pool.iter().any(|c| c.index == index) {
-                item.drop_from_grade();
+            if item.status.is_counted() && !pool.iter().any(|c| c.index == index) {
+                // `drop` refuses never-drop items, which are never in the pool anyway.
+                item.drop();
             }
         }
     }
+}
+
+/// `(earned, possible)` points an item adds to its category when counted.
+fn points(item: &Item) -> (f64, f64) {
+    (item.earned_points.unwrap_or(0.0), item.total_points)
 }
 
 /// Number of items a drop rule asks for (negative and fractional values are floored to 0..).

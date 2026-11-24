@@ -1,116 +1,214 @@
-//! Unit tests for [`super`] (`item/mod.rs`).
-
 use super::*;
-use crate::status::Status;
-use serde_json::json;
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
 fn item(earned_points: Option<f64>, total_points: f64) -> Item {
-    Item {
+    Item::new(
+        "Quiz",
         earned_points,
         total_points,
-        ..Default::default()
+        false,
+        None,
+        Status::default(),
+    )
+}
+
+// ── `Item` Tests ────────────────────────────────────────────────────────────
+mod item {
+    use super::{Item, Status, item};
+
+    // ── Function Tests ──────────────────────────────────────────────────────
+    mod functions {
+        use super::{Item, Status};
+
+        // ── `new()` Tests ───────────────────────────────────────────────────
+        #[test]
+        fn new() {
+            let i = Item::new(
+                "Exam",
+                Some(8.5),
+                10.0,
+                true,
+                Some("note".into()),
+                Status::Counted,
+            );
+            assert_eq!(i.name, "Exam");
+            assert_eq!(i.earned_points, Some(8.5));
+            assert_eq!(i.total_points, 10.0);
+            assert!(i.never_drop);
+            assert_eq!(i.note.as_deref(), Some("note"));
+            assert_eq!(i.status, Status::Counted);
+        }
+
+        #[test]
+        fn new_accepts_owned_and_borrowed_names() {
+            assert_eq!(
+                Item::new(String::from("A"), None, 1.0, false, None, Status::Ungraded).name,
+                "A"
+            );
+            assert_eq!(
+                Item::new("B", None, 1.0, false, None, Status::Ungraded).name,
+                "B"
+            );
+        }
     }
-}
 
-/// Read an item the way imported courses come in: deserialise, then grade,
-/// which recomputes the status.
-fn parse(v: serde_json::Value) -> Item {
-    let mut item: Item = serde_json::from_value(v).unwrap();
-    item.grade();
-    item
-}
+    // ── Method Tests ────────────────────────────────────────────────────────
+    mod methods {
+        use super::{Status, item};
 
-#[test]
-fn graded_items_count() {
-    let mut i = item(Some(8.5), 10.0);
-    i.grade();
-    assert_eq!(i.status, Status::Counted);
-    assert!(i.is_counted());
-    assert_eq!(i.points(), (8.5, 10.0));
-    assert_eq!(i.percent(), Some(85.0));
-}
+        // ── `drop()` Tests ──────────────────────────────────────────────────
+        mod drop {
+            use super::{Status, item};
 
-#[test]
-fn zero_point_items_are_extra_credit() {
-    let mut i = item(Some(2.0), 0.0);
-    i.grade();
-    assert_eq!(i.points(), (2.0, 0.0));
-    assert_eq!(i.percent(), None);
-    assert!(!i.is_remaining());
-}
+            #[test]
+            fn drops_a_droppable_item() {
+                let mut i = item(Some(3.0), 10.0);
+                i.status = Status::Counted;
+                assert!(i.drop());
+                assert_eq!(i.status, Status::Dropped);
+                // The score is kept so the UI can still show it.
+                assert_eq!((i.earned_points, i.total_points), (Some(3.0), 10.0));
+            }
 
-#[test]
-fn ungraded_and_excluded_items_do_not_count() {
-    let mut ungraded = item(None, 10.0);
-    ungraded.grade();
-    assert_eq!(ungraded.status, Status::Ungraded);
-    assert!(!ungraded.is_counted());
-    assert!(ungraded.is_remaining());
+            #[test]
+            fn refuses_a_never_drop_item() {
+                let mut i = item(Some(3.0), 10.0);
+                i.never_drop = true;
+                i.status = Status::Counted;
+                assert!(!i.drop());
+                assert_eq!(i.status, Status::Counted);
+            }
+        }
 
-    let mut excluded = item(Some(5.0), 10.0);
-    excluded.status = Status::Excluded;
-    excluded.grade();
-    assert_eq!(excluded.status, Status::Excluded);
-    assert!(!excluded.is_remaining());
+        // ── `exclude()` Tests ───────────────────────────────────────────────
+        #[test]
+        fn exclude() {
+            let mut i = item(Some(3.0), 10.0);
+            i.exclude();
+            assert_eq!(i.status, Status::Excluded);
+            assert_eq!((i.earned_points, i.total_points), (Some(3.0), 10.0));
+        }
 
-    // Excluded wins over ungraded: it won't count even once it has a score.
-    let mut excluded_blank = item(None, 10.0);
-    excluded_blank.status = Status::Excluded;
-    excluded_blank.grade();
-    assert_eq!(excluded_blank.status, Status::Excluded);
-}
+        // ── `ungrade()` Tests ───────────────────────────────────────────────
+        #[test]
+        fn ungrade() {
+            let mut i = item(Some(3.0), 10.0);
+            i.status = Status::Counted;
+            assert_eq!(i.ungrade(), (Some(3.0), 10.0));
+            assert_eq!((i.earned_points, i.total_points), (None, 0.0));
+            assert_eq!(i.status, Status::Ungraded);
+        }
 
-#[test]
-fn serialises_status_and_only_trusts_excluded_on_input() {
-    let mut i = item(Some(1.0), 2.0);
-    i.grade();
-    let v = serde_json::to_value(&i).unwrap();
-    assert_eq!(v["earnedPoints"], 1.0);
-    assert_eq!(v["totalPoints"], 2.0);
-    assert_eq!(v["status"], "counted");
-    let back: Item = serde_json::from_value(v).unwrap();
-    assert_eq!(
-        (back.earned_points, back.total_points, back.status),
-        (Some(1.0), 2.0, Status::Counted)
-    );
+        // ── `grade()` Tests ─────────────────────────────────────────────────
+        #[test]
+        fn grade() {
+            let mut i = item(None, 10.0);
+            i.grade(8.0, 20.0);
+            assert_eq!((i.earned_points, i.total_points), (Some(8.0), 20.0));
+            assert_eq!(i.status, Status::Counted);
+        }
 
-    // "excluded" is the user's choice and is kept, graded or not.
-    let i =
-        parse(json!({ "name": "A", "earnedPoints": 5, "totalPoints": 10, "status": "excluded" }));
-    assert_eq!(i.status, Status::Excluded);
-    let i = parse(
-        json!({ "name": "A", "earnedPoints": null, "totalPoints": 10, "status": "excluded" }),
-    );
-    assert_eq!(i.status, Status::Excluded);
-    // Anything else is recomputed from the score, whatever was sent.
-    let i =
-        parse(json!({ "name": "A", "earnedPoints": null, "totalPoints": 10, "status": "counted" }));
-    assert_eq!(i.status, Status::Ungraded);
-    let i =
-        parse(json!({ "name": "A", "earnedPoints": 3, "totalPoints": 10, "status": "dropped" }));
-    assert_eq!(i.status, Status::Counted);
-    let i = parse(json!({ "name": "A", "earnedPoints": 3, "totalPoints": 10 }));
-    assert_eq!(i.status, Status::Counted);
+        // ── `status()` Tests ────────────────────────────────────────────────
+        #[test]
+        fn status() {
+            let mut i = item(None, 10.0);
+            assert_eq!(i.status(), Status::Ungraded);
+            i.exclude();
+            assert_eq!(i.status(), Status::Excluded);
+        }
 
-    // Ungraded is an explicit null, so it survives a round trip.
-    let v = serde_json::to_value(item(None, 10.0)).unwrap();
-    assert_eq!(v["earnedPoints"], serde_json::Value::Null);
-    assert_eq!(v["status"], "ungraded");
-}
+        // ── `percent()` Tests ───────────────────────────────────────────────
+        mod percent {
+            use super::item;
 
-#[test]
-fn rejects_items_without_points_possible() {
-    assert!(serde_json::from_value::<Item>(json!({ "name": "?", "earnedPoints": 5 })).is_err());
-}
+            #[test]
+            fn graded() {
+                assert_eq!(item(Some(8.5), 10.0).percent(), Some(85.0));
+                assert_eq!(item(Some(0.0), 10.0).percent(), Some(0.0));
+            }
 
-#[test]
-fn a_missing_status_defaults_to_ungraded_until_graded() {
-    let i: Item =
-        serde_json::from_value(json!({ "name": "Q", "earnedPoints": 3, "totalPoints": 10 }))
-            .unwrap();
-    assert_eq!(i.status, Status::Ungraded);
-    assert_eq!(
-        parse(json!({ "name": "Q", "earnedPoints": 3, "totalPoints": 10 })).status,
-        Status::Counted
-    );
+            #[test]
+            fn ungraded_is_none() {
+                assert_eq!(item(None, 10.0).percent(), None);
+            }
+
+            #[test]
+            fn extra_credit_is_none() {
+                assert_eq!(item(Some(2.0), 0.0).percent(), None);
+            }
+        }
+    }
+
+    // ── Trait Tests ─────────────────────────────────────────────────────────
+    mod traits {
+        use super::{Item, Status, item};
+
+        use serde_json::{Value, json};
+
+        // ── `Default` Tests ─────────────────────────────────────────────────
+        #[test]
+        fn default() {
+            let i = Item::default();
+            assert_eq!(i.name, "");
+            assert_eq!((i.earned_points, i.total_points), (None, 0.0));
+            assert!(!i.never_drop);
+            assert_eq!(i.note, None);
+            assert_eq!(i.status, Status::Ungraded);
+        }
+
+        // ── `Serialize` Tests ───────────────────────────────────────────────
+        #[test]
+        fn serialize() {
+            let mut i = item(Some(1.0), 2.0);
+            i.status = Status::Counted;
+            assert_eq!(
+                serde_json::to_value(&i).unwrap(),
+                json!({ "name": "Quiz", "earnedPoints": 1.0, "totalPoints": 2.0, "status": "counted" })
+            );
+            // Ungraded is an explicit null, so it survives a round trip;
+            // neverDrop and note are only written when set.
+            let mut i = item(None, 10.0);
+            i.never_drop = true;
+            i.note = Some("n".into());
+            let v = serde_json::to_value(&i).unwrap();
+            assert_eq!(v["earnedPoints"], Value::Null);
+            assert_eq!(v["neverDrop"], true);
+            assert_eq!(v["note"], "n");
+        }
+
+        // ── `Deserialize` Tests ─────────────────────────────────────────────
+        mod deserialize {
+            use super::{Item, Status};
+
+            use serde_json::{from_value, json};
+
+            #[test]
+            fn round_trip() {
+                let i = Item::new(
+                    "Q",
+                    Some(3.0),
+                    10.0,
+                    true,
+                    Some("n".into()),
+                    Status::Excluded,
+                );
+                let back: Item = from_value(serde_json::to_value(&i).unwrap()).unwrap();
+                assert_eq!(back, i);
+            }
+
+            #[test]
+            fn optional_fields_default() {
+                let i: Item = from_value(json!({ "name": "Q", "totalPoints": 10 })).unwrap();
+                assert_eq!(i.earned_points, None);
+                assert!(!i.never_drop);
+                assert_eq!(i.note, None);
+                assert_eq!(i.status, Status::Ungraded);
+            }
+
+            #[test]
+            fn requires_total_points() {
+                assert!(from_value::<Item>(json!({ "name": "?", "earnedPoints": 5 })).is_err());
+            }
+        }
+    }
 }

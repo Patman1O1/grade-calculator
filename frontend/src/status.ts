@@ -18,8 +18,8 @@ export type Status =
   | 'ungraded'
 
 /**
- * The status an item has before any drop rule (like `Status::for_score` in
- * Rust): 'excluded' stays 'excluded'; otherwise 'counted' with a score and
+ * The status an item has before any drop rule (like `Category::reset_statuses`
+ * in Rust): 'excluded' stays 'excluded'; otherwise 'counted' with a score and
  * 'ungraded' without.
  */
 export function forScore(status: Status, earnedPoints: number | null): Status {

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::category::Category;
 use crate::item::Item;
+use crate::status::Status;
 
 /// How a course combines its categories.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +72,12 @@ pub struct Course {
     pub letter: Option<String>,
 }
 
+/// Ungraded, not excluded, and still has points available: the work
+/// "what do I need?" solves for.
+fn is_remaining(item: &Item) -> bool {
+    item.earned_points.is_none() && !item.status.is_excluded() && item.total_points > 0.0
+}
+
 /// The usual 90/80/70/60 letter scale.
 pub fn standard_scale() -> Vec<Cutoff> {
     [
@@ -95,12 +102,14 @@ impl Course {
         let category = |name: &str, weight: f64, item: &str, total_points: f64| Category {
             name: name.to_owned(),
             weight,
-            items: vec![Item {
-                name: item.to_owned(),
-                earned_points: None,
+            items: vec![Item::new(
+                item,
+                None,
                 total_points,
-                ..Default::default()
-            }],
+                false,
+                None,
+                Status::Ungraded,
+            )],
             ..Default::default()
         };
         Course {
@@ -179,7 +188,7 @@ impl Course {
         self.categories
             .iter()
             .flat_map(|c| &c.items)
-            .filter(|i| i.is_remaining())
+            .filter(|i| is_remaining(i))
             .count()
     }
 
@@ -187,7 +196,7 @@ impl Course {
     pub fn with_remaining_at(&self, fraction: f64) -> Course {
         let mut c = self.clone();
         for item in c.categories.iter_mut().flat_map(|c| c.items.iter_mut()) {
-            if item.is_remaining() {
+            if is_remaining(item) {
                 item.earned_points = Some(item.total_points * fraction);
             }
         }

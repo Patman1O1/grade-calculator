@@ -110,6 +110,7 @@ classDiagram
     +/possible?: f64
     +/percent?: f64
     +grade(&mut self)
+    +reset_statuses(&mut self)
     -apply_drops(&mut self)
   }
   class Item {
@@ -120,11 +121,13 @@ classDiagram
     +neverDrop: bool
     +note?: String
     +status: Status
-    +is_excluded(&self) bool
-    +is_remaining(&self) bool
+    +new(name, earned_points, total_points, never_drop, note, status)$ Item
+    +drop(&mut self) bool
+    +exclude(&mut self)
+    +ungrade(&mut self) (Option~f64~, f64)
+    +grade(&mut self, earned_points: f64, total_points: f64)
+    +status(&self) Status
     +percent(&self) Option~f64~
-    +grade(&mut self)
-    ~points(&self) (f64, f64)
   }
   class Cutoff {
     <<struct>>
@@ -137,8 +140,10 @@ classDiagram
     Dropped = "dropped"
     Excluded = "excluded"
     Ungraded = "ungraded"
-    +for_score(self, earned_points: Option~f64~) Status
-    +counts(self) bool
+    +is_counted(self) bool
+    +is_dropped(self) bool
+    +is_excluded(self) bool
+    +is_ungraded(self) bool
   }
   Course "1" *-- "0..*" Category : categories
   Category "1" *-- "0..*" Item : items
@@ -153,7 +158,7 @@ classDiagram
 - On a graded course, a category's or the course's `percent` (and the course's `letter`) stays absent when nothing is graded yet; `earned` and `possible` are always present.
 - The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
 - An item is `earned_points` out of `total_points` (`earnedPoints` / `totalPoints` in JSON); those points are also how much it counts in its category. Categories and courses keep `earned` / `possible` for their computed totals. `Item` uses serde's derived `Deserialize`; `api::parse_courses` (import) then grades each item's status, so only an `"excluded"` status is taken from the input.
-- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Status::for_score` turns anything else into `Counted` (has a score) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped`. So a status sent in from outside is never trusted except for `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned_points` and `total_points`, so the UI can still show the score.
+- `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Category::reset_statuses` turns anything else into `Counted` (has a score, via `Item::grade`) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped` with `Item::drop`, which refuses never-drop items. Import runs `reset_statuses` too. So a status sent in from outside is never trusted except for `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned_points` and `total_points`, so the UI can still show the score.
 - `Course::needed_on_remaining` bisects on the score given to every remaining item (via `with_remaining_at`), regrading a copy of the course each step.
 - Each of `item/`, `category/`, `course/`, `status/` and `utils/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` live in `utils/` (`mod.rs`, with their tests in `tests.rs`). `lib.rs` only declares the modules (`api`, `category`, `course`, `item`, `utils`, `wasm`); types are used by their full paths, e.g. `crate::course::Course`.

@@ -4,6 +4,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::category::Category;
 use crate::course::{Course, Needed};
 
 /// A target percentage and what it takes to reach it.
@@ -87,13 +88,10 @@ fn parse_courses(data: Value) -> Vec<Course> {
     list.into_iter()
         .filter_map(|v| serde_json::from_value::<Course>(v).ok())
         .map(|mut course| {
-            for item in course
+            course
                 .categories
                 .iter_mut()
-                .flat_map(|c| c.items.iter_mut())
-            {
-                item.grade();
-            }
+                .for_each(Category::reset_statuses);
             course
         })
         .collect()

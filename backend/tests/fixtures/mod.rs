@@ -9,7 +9,6 @@ use grade_calculator::category::Category;
 use grade_calculator::course::standard_scale;
 use grade_calculator::course::{Course, Cutoff, Scheme};
 use grade_calculator::item::Item;
-use grade_calculator::status::Status;
 
 /// An item scored `score` out of `out_of` points.
 fn item(name: &str, score: Option<f64>, out_of: f64) -> Item {
@@ -34,7 +33,7 @@ fn u(name: &str, out_of: f64) -> Item {
 /// Builder methods for the course data below.
 trait ItemExt {
     fn with_worth(self, worth: f64) -> Self;
-    fn exclude(self) -> Self;
+    fn excluded(self) -> Self;
     fn with_note(self, note: &str) -> Self;
 }
 
@@ -48,8 +47,8 @@ impl ItemExt for Item {
         }
         self
     }
-    fn exclude(mut self) -> Self {
-        self.status = Status::Excluded;
+    fn excluded(mut self) -> Self {
+        Item::exclude(&mut self);
         self
     }
     fn with_note(mut self, note: &str) -> Self {
@@ -157,7 +156,7 @@ pub fn cs401() -> Course {
                 0.0,
                 vec![
                     g("Late Days", 4.0, 5.0)
-                        .exclude()
+                        .excluded()
                         .with_note("Late days remaining; not graded"),
                 ],
             ),
@@ -279,20 +278,20 @@ pub fn cs440() -> Course {
                 0.0,
                 vec![
                     g("Attendance %", 100.0, 100.0)
-                        .exclude()
+                        .excluded()
                         .with_note("Informational"),
                     g("Midterm MC", 32.0, 100.0)
-                        .exclude()
+                        .excluded()
                         .with_note("Part of Midterm"),
                     g("Midterm Non MC", 19.0, 100.0)
-                        .exclude()
+                        .excluded()
                         .with_note("Part of Midterm"),
                     g("Midterm", 51.0, 100.0).with_worth(15.0),
                     u("Final Exam", 100.0).with_worth(20.0).with_note(later),
                     g("Brainstorming", 70.0, 100.0).with_worth(5.0),
-                    g("Rev1", 5.0, 5.0).exclude().with_note("Part of Reviews"),
-                    g("Rev2", 5.0, 5.0).exclude().with_note("Part of Reviews"),
-                    g("Rev3", 5.0, 5.0).exclude().with_note("Part of Reviews"),
+                    g("Rev1", 5.0, 5.0).excluded().with_note("Part of Reviews"),
+                    g("Rev2", 5.0, 5.0).excluded().with_note("Part of Reviews"),
+                    g("Rev3", 5.0, 5.0).excluded().with_note("Part of Reviews"),
                     g("Reviews", 5.0, 5.0)
                         .with_worth(5.0)
                         .with_note("Presentation evaluations"),
@@ -403,7 +402,7 @@ pub fn math218() -> Course {
                 0.0,
                 vec![
                     g("Midsemester Score", 65.39, 0.0)
-                        .exclude()
+                        .excluded()
                         .with_note("Instructor-posted snapshot"),
                 ],
             ),

@@ -106,3 +106,37 @@ fn sums_counted_items_including_extra_credit() {
     let empty = graded(vec![item(None, 10.0)], 0.0, 0.0);
     assert_eq!((empty.earned, empty.percent), (Some(0.0), None));
 }
+
+#[test]
+fn reset_statuses_keeps_excluded_and_recomputes_the_rest() {
+    let mut excluded_graded = item(Some(5.0), 10.0);
+    excluded_graded.exclude();
+    let mut excluded_blank = item(None, 10.0);
+    excluded_blank.exclude();
+    let mut forged_dropped = item(Some(3.0), 10.0);
+    forged_dropped.status = Status::Dropped;
+    let mut forged_counted = item(None, 10.0);
+    forged_counted.status = Status::Counted;
+    let mut c = Category {
+        items: vec![
+            excluded_graded,
+            excluded_blank,
+            forged_dropped,
+            forged_counted,
+            item(Some(1.0), 2.0),
+        ],
+        ..Default::default()
+    };
+    c.reset_statuses();
+    let statuses: Vec<_> = c.items.iter().map(|i| i.status).collect();
+    assert_eq!(
+        statuses,
+        [
+            Status::Excluded,
+            Status::Excluded,
+            Status::Counted,
+            Status::Ungraded,
+            Status::Counted
+        ]
+    );
+}
