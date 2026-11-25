@@ -28,6 +28,7 @@ fn blank_course_is_ungraded() {
     assert!(course["categories"][0]["items"][0].get("id").is_none());
     // Ungraded courses carry no computed fields; an item's status is stored.
     assert!(course.get("percent").is_none());
+    assert!(course.get("target").is_none() && course.get("needs").is_none());
     assert!(course["categories"][0].get("earned").is_none());
     assert_eq!(course["categories"][0]["items"][0]["status"], "ungraded");
 }
@@ -37,6 +38,7 @@ fn evaluates_a_course_and_solves_targets() {
     let course: Course = serde_json::from_value(json!({
         "id": "c", "name": "Test", "scheme": "points",
         "scale": { "a": 90, "b": 80, "c": 70, "d": 65, "f": 0 },
+        "target": 30,
         "categories": [{
             "id": "k", "name": "All", "weight": 0,
             "items": [
@@ -46,9 +48,8 @@ fn evaluates_a_course_and_solves_targets() {
         }]
     }))
     .unwrap();
-    let out = to_json(&evaluate(&course, &[80.0, 95.0, 30.0]));
+    let graded = to_json(&evaluate(&course));
 
-    let graded = &out["course"];
     assert_eq!(graded["name"], "Test");
     assert_eq!(graded["percent"], 60.0);
     assert_eq!(graded["letter"], "F");
@@ -61,12 +62,20 @@ fn evaluates_a_course_and_solves_targets() {
     assert_eq!(items[1]["status"], "ungraded");
     assert_eq!(items[1]["earnedPoints"], Value::Null);
 
-    assert_eq!(out["remaining"], 1);
-    assert_eq!(out["needs"][0]["target"], 80.0);
-    assert_eq!(out["needs"][0]["needed"]["kind"], "needs");
-    assert!((out["needs"][0]["needed"]["fraction"].as_f64().unwrap() - 1.0).abs() < 1e-6);
-    assert_eq!(out["needs"][1]["needed"]["kind"], "impossible");
-    assert_eq!(out["needs"][2]["needed"], json!({ "kind": "secured" }));
+    // Targets: the letters above 0, highest first, then the course's own 30%.
+    assert_eq!(graded["target"], 30.0);
+    assert_eq!(graded["remaining"], 1);
+    assert_eq!(graded["best"], 80.0);
+    let needs: Vec<Option<f64>> = serde_json::from_value(graded["needs"].clone()).unwrap();
+    assert_eq!(needs.len(), 5);
+    assert_eq!(needs[0], None); // A (90%): out of reach
+    for (need, expected) in needs[1..4].iter().zip([1.0, 0.8, 0.7]) {
+        assert!(
+            (need.unwrap() - expected).abs() < 1e-6,
+            "{need:?} vs {expected}"
+        );
+    }
+    assert_eq!(needs[4], Some(0.0)); // 30%: secured
 }
 
 #[test]
@@ -76,11 +85,10 @@ fn summarises_every_course() {
     // Summaries come back in the same order as the courses.
     let out = summaries(vec![c1, c2]);
     assert_eq!(out.len(), 2);
-    assert!((out[0].percent.unwrap() - 56.95).abs() < 0.005);
-    assert_eq!(out[0].letter.as_deref(), Some("D"));
-    assert_eq!(out[1].percent, None);
-    // The front-end relies on `null` (not a missing key) here.
-    assert_eq!(to_json(&out[1])["percent"], Value::Null);
+    assert!((out[0].unwrap() - 56.95).abs() < 0.005);
+    assert_eq!(out[1], None);
+    // The front-end relies on `null` here.
+    assert_eq!(to_json(&out), json!([out[0], null]));
 }
 
 #[test]
@@ -104,7 +112,8 @@ fn import_validates_courses_and_drops_ids() {
 
 #[test]
 fn computed_fields_in_input_are_recomputed() {
-    let forged = json!({ "name": "F", "scheme": "points", "scale": { "a": 90, "b": 80, "c": 70, "d": 60, "f": 0 }, "percent": 100, "letter": "A",
+    let forged = json!({ "name": "F", "scheme": "points", "scale": { "a": 90, "b": 80, "c": 70, "d": 60, "f": 0 }, "percent": 100,
+        "remaining": 7, "best": 100, "needs": [0.5], "letter": "A",
         "categories": [{ "name": "C", "weight": 0, "earned": 99,
             "items": [
                 { "name": "I", "earnedPoints": 0, "totalPoints": 10, "status": "dropped" },
@@ -113,11 +122,20 @@ fn computed_fields_in_input_are_recomputed() {
 
     let imported = import_courses(forged).unwrap();
     assert_eq!(imported[0].percent, None);
+    assert_eq!(
+        (
+            &imported[0].remaining,
+            &imported[0].best,
+            &imported[0].needs
+        ),
+        (&None, &None, &None)
+    );
     assert_eq!(imported[0].categories[0].earned, None);
     assert_eq!(imported[0].categories[0].items[0].status, Status::Counted);
     assert_eq!(imported[0].categories[0].items[1].status, Status::Excluded);
 
-    let graded = evaluate(&imported[0], &[]).course;
+    let graded = evaluate(&imported[0]);
+    assert_eq!(graded.remaining, Some(0));
     assert_eq!(graded.percent, Some(0.0));
     assert_eq!(graded.letter.as_deref(), Some("F"));
     assert_eq!(graded.categories[0].items[0].earned_points, Some(0.0));

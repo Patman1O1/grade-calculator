@@ -4,21 +4,7 @@
  * anything else; after that every function is synchronous.
  */
 import init, * as wasm from './wasm/engine.js'
-import { withIds, type Course, type CourseSummary, type EngineCourse, type Needed } from './course'
-
-// Engine results (mirror backend/src/api.rs).
-
-export interface Evaluation {
-  /**
-   * The course with its computed fields filled in. It has no ids: its
-   * categories and items are in the same order as the course that was graded.
-   */
-  course: EngineCourse
-  /** Ungraded items that still have points available. */
-  remaining: number
-  /** One entry per requested target, in request order. */
-  needs: { target: number; needed: Needed }[]
-}
+import { withIds, type Course, type EngineCourse } from './course'
 
 /** Fetch and instantiate the .wasm module. */
 export async function loadEngine(): Promise<void> {
@@ -26,21 +12,21 @@ export async function loadEngine(): Promise<void> {
 }
 
 /**
- * Summaries already worked out, by course object. Courses are never edited in
+ * Percentages already worked out, by course object. Courses are never edited in
  * place (`updateCourse` replaces the edited one with a copy), so a course
  * object's summary never goes stale, and on each edit only the edited course
  * needs grading again.
  */
-const summaryCache = new WeakMap<Course, CourseSummary>()
+const summaryCache = new WeakMap<Course, number | null>()
 
-/** Each course's summary, asking the engine only about courses not seen before. */
-function summaries(courses: Course[]): CourseSummary[] {
+/** Each course's percentage, asking the engine only about courses not seen before. */
+function summaries(courses: Course[]): (number | null)[] {
   const missing = courses.filter((c) => !summaryCache.has(c))
   if (missing.length > 0) {
-    const results: CourseSummary[] = wasm.summaries(missing)
+    const results: (number | null)[] = wasm.summaries(missing)
     missing.forEach((c, i) => summaryCache.set(c, results[i]))
   }
-  return courses.map((c) => summaryCache.get(c)!)
+  return courses.map((c) => summaryCache.get(c) ?? null)
 }
 
 /**
@@ -50,9 +36,13 @@ function summaries(courses: Course[]): CourseSummary[] {
 export const engine = {
   /** A new course to start from. */
   blankCourse: (): Course => withIds(wasm.blankCourse()),
-  /** Grade a course and solve "what do I need?" for each target percentage. */
-  evaluate: (course: Course, targets: number[]): Evaluation => wasm.evaluate(course, targets),
-  /** Each course's overall grade, in the same order as `courses`. Cached per course object. */
+  /**
+   * Grade a course and solve "what do I need?" for its letters and its own
+   * `target`. The result has no ids: its categories and items are in the same
+   * order as the course that was graded.
+   */
+  evaluate: (course: Course): EngineCourse => wasm.evaluate(course),
+  /** Each course's overall percentage (null when nothing is graded), in the same order as `courses`. Cached per course object. */
   summaries,
   /** Validate parsed JSON (one course or a list) and get its courses with new ids. Throws if it has no course. */
   importCourses: (data: unknown): Course[] => (wasm.importCourses(data) as EngineCourse[]).map(withIds),

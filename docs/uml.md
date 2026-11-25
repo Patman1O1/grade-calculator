@@ -25,7 +25,7 @@ flowchart LR
     CourseEditor["components/CourseEditor.tsx"]
     Summary["components/Summary.tsx"]
     NumberInput["components/NumberInput.tsx"]
-    coursets["course.ts<br/>Course, Scheme, Needed, CourseSummary, Mutate"]
+    coursets["course.ts<br/>Course, Scheme, Mutate"]
     scalets["scale.ts<br/>Scale, Cutoff"]
     categoryts["category.ts<br/>Category"]
     itemts["item.ts<br/>Item"]
@@ -42,7 +42,7 @@ flowchart LR
     status["status/mod.rs<br/>Status"]
     scale["scale/mod.rs<br/>Scale"]
     category["category/mod.rs<br/>Category + drop search"]
-    course["course/mod.rs<br/>Course, Scheme, Needed"]
+    course["course/mod.rs<br/>Course, Scheme"]
   end
 
   main --> App
@@ -92,17 +92,25 @@ classDiagram
     +scale: Scale
     +displayDecimals?: u32
     +notes?: String
+    +target?: f64
     +/earned?: f64
     +/possible?: f64
     +/percent?: f64
     +/letter?: String
+    +/remaining?: usize
+    +/best?: f64
+    +/needs?: Vec~Option~f64~~
     +grade(&mut self)
     +graded(&self) Course
+    +evaluate(&mut self)
+    +evaluated(&self) Course
+    +targets(&self) Vec~f64~
     +letter_for(&self, percent: Option~f64~) Option~String~
     +remaining_count(&self) usize
     +with_remaining_at(&self, fraction: f64) Course
-    +needed_on_remaining(&self, target: f64) Needed
-    +needs(&self, targets: &[f64]) Vec~Needed~
+    +needed_on_remaining(&self, target: f64) Option~f64~
+    +needs(&self, targets: &[f64]) Vec~Option~f64~~
+    -solve(&self, targets: &[f64]) (Option~f64~, Vec~Option~f64~~)
   }
   class Category {
     <<struct>>
@@ -163,7 +171,6 @@ classDiagram
   Course "1" *-- "1" Scale : scale
   Course --> "1" Scheme : scheme
   Item --> "1" Status : status
-  Course ..> Needed : needs
 ```
 
 - `neverDrop` and `extraCredit` default to `false` and are left out of the JSON when false.
@@ -172,44 +179,21 @@ classDiagram
 - The engine has no ids: they belong to the front-end (React keys, the selected course, which course an edit applies to), and serde ignores any it is given. A graded course keeps its categories and items in the same order, so the front-end matches results to rows by position.
 - An item is `earned_points` out of `total_points` (`earnedPoints` / `totalPoints` in JSON); those points are also how much it counts in its category. Categories and courses keep `earned` / `possible` for their computed totals. `Item` uses serde's derived `Deserialize`; `api::parse_courses` (import) then grades each item's status, so only an `"excluded"` status is taken from the input.
 - `Status` lives in its own module (`status/`) and is a stored field of every item. Only `Excluded` is the user's choice and is kept as given; `Category::reset_statuses` turns anything else into `Counted` (has a score, via `Item::grade`) or `Ungraded` (no score), and `Category::apply_drops` then changes some `Counted` items to `Dropped` with `Item::drop`, which refuses never-drop items. Import runs `reset_statuses` too. So a status sent in from outside is never trusted except for `Excluded`. The category sums only `Counted` items, and the front-end styles each row by the graded status. A dropped item keeps its `earned_points` and `total_points`, so the UI can still show the score.
-- `Course::needs` solves "what do I need?" for all targets at once (`needed_on_remaining` is the one-target version). It grades one working copy of the course, then varies only the categories with remaining work. Without drop rules in those categories the grade is a straight line in the score on the remaining work, so it is solved exactly from 0% and 100%; with drop rules it bisects (40 steps).
+- The fields marked `/` are computed: `earned`, `possible`, `percent` and `letter` by `grade()`, and also `remaining`, `best` and `needs` by `evaluate()` (section 3).
 - Each of `item/`, `category/`, `course/`, `scale/`, `status/` and `utils/` keeps its code in `mod.rs` and its unit tests in `tests.rs` (declared as `#[cfg(test)] mod tests;`).
 - `round` (display rounding, used by tests) and the serde helper `is_false` live in `utils/` (`mod.rs`, with their tests in `tests.rs`). `lib.rs` only declares the modules (`api`, `category`, `course`, `item`, `scale`, `status`, `utils`, `wasm`); types are used by their full paths, e.g. `crate::course::Course`.
 
 ## 3. "What do I need?" (`backend/src/course/mod.rs`)
 
-`Needed` is what `Course::needs` returns for each target percentage: the average score needed on every remaining item, as a fraction of its points.
+`Course::evaluate` grades the course and also solves "what do I need?" for `Course::targets()`: each letter's cutoff above 0, highest first, then the course's own `target` if it has one. It fills in three more computed fields:
 
-```mermaid
-classDiagram
-  direction LR
-  class Needed {
-    <<enum>>
-    +kind: String
-  }
-  class NoRemaining {
-    <<variant>>
-    +kind = "no-remaining"
-  }
-  class Secured {
-    <<variant>>
-    +kind = "secured"
-  }
-  class Impossible {
-    <<variant>>
-    +kind = "impossible"
-    +best?: f64
-  }
-  class Needs {
-    <<variant>>
-    +kind = "needs"
-    +fraction: f64
-  }
-  Needed <|-- NoRemaining
-  Needed <|-- Secured
-  Needed <|-- Impossible
-  Needed <|-- Needs
-```
+| Field | Meaning |
+|---|---|
+| `remaining` | Items still to be graded: no score, not excluded, worth more than 0 points. |
+| `best` | The grade with full marks on all remaining work: the best still possible. With nothing remaining it is the current grade; absent if undefined. |
+| `needs` | One entry per target, in `targets()` order: the average score needed on the remaining work as a fraction of its points (`0` when the target is already secured), or `null` when it is out of reach even with full marks. |
+
+`Course::needs` (and `needed_on_remaining`, for one target) returns the same answers for any targets. All of them go through the private `solve`, which grades one working copy of the course and then varies only the categories with remaining work. If none of those has drop rules, the grade is a straight line in the score on the remaining work, so it is solved exactly from the grades at 0% and 100%; otherwise it bisects (40 steps).
 
 ## 4. Drop search (`backend/src/category/mod.rs`, private)
 
@@ -219,22 +203,16 @@ classDiagram
   class category {
     <<module>>
     -drop_count(n: Option~f64~)$ usize
-    -choose_kept(items: &[Item], pool: &mut Vec~usize~, keep: usize, fixed: (f64, f64), mode: Mode, scratch)$
-  }
-  class Mode {
-    <<enum>>
-    Max
-    Min
+    -choose_kept(items: &[Item], pool: &mut Vec~usize~, keep: usize, fixed: (f64, f64), maximise: bool, scratch)$
   }
   class Category {
     <<struct>>
     -apply_drops(&mut self)
   }
   Category ..> category : apply_drops
-  category ..> Mode : drop lowest / highest
 ```
 
-`Category::apply_drops` collects the indexes of the graded, droppable items into a pool and calls `choose_kept`, which narrows the pool to the items kept by drop-lowest (`Max`) and then drop-highest (`Min`). It finds the same best set Canvas does, using Dinkelbach's method: for a ratio q the best set is the items with the largest `earned − q·possible`, so it repeatedly moves q to the ratio of the best set for q until q stops improving, usually in 2–5 rounds. Ties between sets with the same ratio keep the earlier items. Items marked `neverDrop` are held fixed, and at least one item always stays.
+`Category::apply_drops` collects the indexes of the graded, droppable items into a pool and calls `choose_kept`, which narrows the pool to the items kept by drop-lowest (`maximise`) and then drop-highest. It finds the same best set Canvas does, using Dinkelbach's method: for a ratio q the best set is the items with the largest `earned − q·possible`, so it repeatedly moves q to the ratio of the best set for q until q stops improving, usually in 2–5 rounds. Ties between sets with the same ratio keep the earlier items. Items marked `neverDrop` are held fixed, and at least one item always stays.
 
 ## 5. The blank course (`backend/src/course/mod.rs`)
 
@@ -266,8 +244,8 @@ classDiagram
   class wasm {
     <<module>>
     +blankCourse()$ Course
-    +evaluate(course: JsValue, targets: JsValue)$ Evaluation
-    +summaries(courses: JsValue)$ CourseSummary[]
+    +evaluate(course: JsValue)$ Course
+    +summaries(courses: JsValue)$ number or null[]
     +importCourses(data: JsValue)$ Course[]
     -to_js(value)$ JsValue
     -from_js(value, what)$ T
@@ -275,30 +253,11 @@ classDiagram
   class api {
     <<module>>
     +NOT_A_COURSE: &str$
-    +evaluate(course: &Course, targets: &[f64])$ Evaluation
-    +summaries(courses: Vec~Course~)$ Vec~CourseSummary~
+    +evaluate(course: &Course)$ Course
+    +summaries(courses: Vec~Course~)$ Vec~Option~f64~~
     +import_courses(data: Value)$ Result~Vec~Course~, &str~
   }
-  class Evaluation {
-    <<struct>>
-    +course: Course
-    +remaining: usize
-    +needs: Vec~TargetNeed~
-  }
-  class TargetNeed {
-    <<struct>>
-    +target: f64
-    +needed: Needed
-  }
-  class CourseSummary {
-    <<struct>>
-    +percent?: f64
-    +letter?: String
-  }
   wasm ..> api : wraps
-  api ..> Evaluation
-  Evaluation *-- TargetNeed
-  api ..> CourseSummary
 ```
 
 All `wasm` functions return `Result<JsValue, JsError>`; the types shown are what the JavaScript side receives.
@@ -314,13 +273,13 @@ sequenceDiagram
   User->>Editor: types a score
   Editor->>App: mutate(draft => …)
   App->>App: new course state, saved to localStorage
-  App->>Engine: evaluate(course, targets)
-  Engine-->>App: { course (graded), remaining, needs }
+  App->>Engine: evaluate(course)
+  Engine-->>App: graded course (with remaining, best, needs)
   App->>Editor: graded course (matched by position)
-  App->>Summary: evaluation
+  App->>Summary: graded course
 ```
 
-Grading happens synchronously during the render, in a few milliseconds even for courses with drop rules.
+Grading happens synchronously during the render, in well under a millisecond even for courses with drop rules.
 
 ## 7. Front-end (`frontend/src/`)
 
@@ -336,8 +295,7 @@ classDiagram
   }
   class CourseView {
     <<component>>
-    -custom: number or null
-    -evaluation: Evaluation or error
+    -evaluation: Course or error
   }
   class CourseEditor {
     <<component>>
@@ -351,9 +309,8 @@ classDiagram
   class Summary {
     <<component>>
     +course: Course
-    +evaluation: Evaluation or null
-    +custom: number or null
-    +onCustom(value) void
+    +graded: Course or null
+    +mutate: Mutate
   }
   class NumberInput {
     <<component>>
@@ -364,8 +321,8 @@ classDiagram
     <<module>>
     +loadEngine()$ Promise~void~
     +blankCourse()$ Course
-    +evaluate(course, targets)$ Evaluation
-    +summaries(courses)$ CourseSummary[]
+    +evaluate(course)$ Course
+    +summaries(courses)$ number or null[]
     +importCourses(data)$ Course[]
   }
   App *-- "0..1" CourseView : selected course
@@ -392,10 +349,9 @@ classDiagram
   direction LR
   class course {
     <<module>>
-    +Course, Scheme, Needed, CourseSummary, Mutate
+    +Course, Scheme, Mutate
     +decimals(course)$ number
     +letterTargets(course)$ Cutoff[]
-    +targets(course, custom)$ number[]
     +totalWeight(course)$ number
     +EngineCourse
     +withIds(course)$ Course
@@ -444,4 +400,4 @@ classDiagram
   item ..> status : Status, forScore
 ```
 
-`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course or the custom target changes; if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` gives every course the engine creates new ids with `withIds`, and also holds the engine's other result type (`Evaluation`), mirroring `api.rs`; `CourseSummary` and `percentsById`, which turns summaries into each course's percentage for the course picker, are in `course.ts`. `engine.summaries` caches each course object's summary: courses are never edited in place, so after an edit only the edited course is sent to the engine again.
+`main.tsx` awaits `loadEngine()` (which fetches and instantiates the `.wasm`) before rendering `App`, so every `engine` call after that is synchronous. `CourseView` is keyed by course id and grades its course with `useMemo` whenever the course changes (the custom target is the course's `target`, so changing it is an edit too); if the engine throws (for example on a malformed course from storage), it shows an error banner instead. `Mutate` (in `course.ts`) is `(fn: (draft: Course) => void) => void`: `App` passes `fn` to `updateCourse`, which clones the selected course, lets `fn` edit the draft, and returns the new course list. `engine.ts` gives every course the engine creates new ids with `withIds`; `percentsById`, which turns summaries into each course's percentage for the course picker, is in `course.ts`. `engine.summaries` caches each course object's percentage: courses are never edited in place, so after an edit only the edited course is sent to the engine again.

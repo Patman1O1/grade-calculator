@@ -40,11 +40,11 @@ cd engine && cargo test    # unit tests, the front-end interface, and the docs/ 
 | Function | Returns |
 |---|---|
 | `blankCourse()` | a starter `Course` |
-| `evaluate(course, targets)` | `{ course, remaining, needs: [{ target, needed }] }`, where `course` is the graded copy |
-| `summaries(courses)` | `[{ percent, letter }]`, in the same order as `courses` |
+| `evaluate(course)` | the graded copy of `course`, with "what do I need?" solved for its letters and its own `target` |
+| `summaries(courses)` | each course's percentage (`null` when nothing is graded), in the same order as `courses` |
 | `importCourses(data)` | the courses in `data` (one or a list), validated |
 
-A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course, and `earned`, `possible` and `percent` on each category. They are left out of ungraded courses and ignored on input.
+A graded course has extra computed fields: `earned`, `possible`, `percent` and `letter` on the course, and `earned`, `possible` and `percent` on each category. `evaluate` also fills in `remaining` (items left to grade), `best` (the grade with full marks on everything left) and `needs`: for each letter above 0, highest first, and then the course's `target`, the average needed on the remaining work as a fraction of its points (`0` if already secured, `null` if out of reach). Computed fields are left out of ungraded courses and ignored on input.
 
 Each item also has a stored `status`: `counted`, `dropped`, `excluded` or `ungraded`. Only `excluded` is the user's choice (the **Excl.** checkbox) and the engine keeps it; it recomputes the other three from the score and the drop rules on every evaluation, whatever was stored or sent in.
 

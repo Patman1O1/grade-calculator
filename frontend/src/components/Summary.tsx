@@ -1,22 +1,20 @@
-import { decimals as decimalsOf, describeNeed, letterTargets, type Course } from '../course'
-import type { Evaluation } from '../engine'
+import { decimals as decimalsOf, describeNeed, letterTargets, type Course, type EngineCourse, type Mutate } from '../course'
 import { formatNumber, formatPercent, round } from '../format'
 import { NumberInput } from './NumberInput'
 
 interface Props {
   course: Course
-  /** The engine's evaluation; null if the course couldn't be graded. */
-  evaluation: Evaluation | null
-  custom: number | null
-  onCustom: (value: number | null) => void
+  /** The course as `engine.evaluate` graded it; null if it couldn't be graded. */
+  graded: EngineCourse | null
+  mutate: Mutate
 }
 
-export function Summary({ course, evaluation, custom, onCustom }: Props) {
+export function Summary({ course, graded, mutate }: Props) {
   const decimals = decimalsOf(course)
   const weighted = course.scheme === 'weighted'
   const targets = letterTargets(course)
 
-  if (!evaluation) {
+  if (!graded) {
     return (
       <aside className="summary">
         <section className="panel total">
@@ -29,9 +27,16 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
     )
   }
 
-  const { course: graded, remaining, needs } = evaluation
   const gradedPossible = graded.possible ?? 0
-  const needFor = (target: number) => needs.find((n) => n.target === target)?.needed
+  const remaining = graded.remaining ?? 0
+  // One per letter target, then the course's own target.
+  const needs = graded.needs ?? []
+  const custom = course.target ?? null
+  const setCustom = (value: number | null) =>
+    mutate((d) => {
+      if (value === null) delete d.target
+      else d.target = value
+    })
 
   return (
     <aside className="summary">
@@ -102,12 +107,12 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
             </p>
             <table className="needs">
               <tbody>
-                {targets.map((t) => (
+                {targets.map((t, i) => (
                   <tr key={t.grade}>
                     <th>
                       {t.letter} <small>≥ {round(t.min, 2)}%</small>
                     </th>
-                    <td>{describeNeed(needFor(t.min))}</td>
+                    <td>{describeNeed(needs[i], graded.best)}</td>
                   </tr>
                 ))}
                 <tr>
@@ -117,10 +122,10 @@ export function Summary({ course, evaluation, custom, onCustom }: Props) {
                       aria-label="Custom target percent"
                       placeholder="Target %"
                       value={custom}
-                      onChange={onCustom}
+                      onChange={setCustom}
                     />
                   </th>
-                  <td>{custom === null ? '' : describeNeed(needFor(custom))}</td>
+                  <td>{custom === null ? '' : describeNeed(needs[targets.length], graded.best)}</td>
                 </tr>
               </tbody>
             </table>

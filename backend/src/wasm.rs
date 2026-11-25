@@ -29,15 +29,14 @@ pub fn blank_course() -> Result<JsValue, JsError> {
     to_js(&Course::blank())
 }
 
-/// `evaluate(course, targets): Evaluation`
+/// `evaluate(course): Course`, graded and with "what do I need?" solved.
 #[wasm_bindgen]
-pub fn evaluate(course: JsValue, targets: JsValue) -> Result<JsValue, JsError> {
+pub fn evaluate(course: JsValue) -> Result<JsValue, JsError> {
     let course: Course = from_js(course, "course")?;
-    let targets: Vec<f64> = from_js(targets, "targets")?;
-    to_js(&api::evaluate(&course, &targets))
+    to_js(&api::evaluate(&course))
 }
 
-/// `summaries(courses): CourseSummary[]`
+/// `summaries(courses): (number | null)[]`, each course's percentage.
 #[wasm_bindgen]
 pub fn summaries(courses: JsValue) -> Result<JsValue, JsError> {
     to_js(&api::summaries(from_js(courses, "courses")?))

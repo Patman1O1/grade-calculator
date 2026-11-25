@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { decimals, exportFileName, percentsById, targets, updateCourse, type Course, type Mutate } from './course'
+import { decimals, exportFileName, percentsById, updateCourse, type Course, type Mutate } from './course'
 import { engine } from './engine'
 import { formatPercent } from './format'
 import { loadState, saveState, type SavedState } from './storage'
@@ -10,14 +10,13 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /** Editor + summary for one course, graded by the Rust engine on every change. */
 function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
-  const [custom, setCustom] = useState<number | null>(null)
   const evaluation = useMemo(() => {
     try {
-      return { data: engine.evaluate(course, targets(course, custom)), error: null }
+      return { data: engine.evaluate(course), error: null }
     } catch (e) {
       return { data: null, error: message(e) }
     }
-  }, [course, custom])
+  }, [course])
 
   return (
     <>
@@ -27,8 +26,8 @@ function CourseView({ course, mutate }: { course: Course; mutate: Mutate }) {
         </p>
       )}
       <main className="layout">
-        <CourseEditor course={course} graded={evaluation.data?.course ?? null} mutate={mutate} />
-        <Summary course={course} evaluation={evaluation.data} custom={custom} onCustom={setCustom} />
+        <CourseEditor course={course} graded={evaluation.data} mutate={mutate} />
+        <Summary course={course} graded={evaluation.data} mutate={mutate} />
       </main>
     </>
   )

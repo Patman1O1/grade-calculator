@@ -23,20 +23,6 @@ pub enum Scheme {
     Weighted,
 }
 
-/// Average needed on the remaining work to reach a target.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-pub enum Needed {
-    /// Nothing left to grade.
-    NoRemaining,
-    /// Reached even with zeros on everything left.
-    Secured,
-    /// Out of reach even with 100% on everything left; `best` is that 100% grade.
-    Impossible { best: Option<f64> },
-    /// Average needed on the remaining work, as a fraction of its points.
-    Needs { fraction: f64 },
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Course {
@@ -50,6 +36,10 @@ pub struct Course {
     pub display_decimals: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// A target percentage of the user's own for "what do I need?", solved
+    /// after the letter cutoffs (see [`Course::targets`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<f64>,
 
     // Computed by `grade` (see the crate docs).
     /// Points scheme: totals across categories. Weighted scheme: weighted points.
@@ -62,6 +52,21 @@ pub struct Course {
     pub percent: Option<f64>,
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub letter: Option<String>,
+
+    // Computed by `evaluate` only ("what do I need?").
+    /// Number of items still to be graded (see [`Course::remaining_count`]).
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub remaining: Option<usize>,
+    /// The grade with full marks on all remaining work: the best still
+    /// possible. The current grade when nothing remains; `None` if undefined.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub best: Option<f64>,
+    /// One entry per target in [`Course::targets`], in that order: the
+    /// average score needed on the remaining work, as a fraction of its
+    /// points (`0` when the target is already secured), or `None` when it is
+    /// out of reach even with full marks (see [`Course::needs`]).
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub needs: Option<Vec<Option<f64>>>,
 }
 
 /// Ungraded, not excluded, and still has points available: the work
@@ -174,53 +179,116 @@ impl Course {
         c
     }
 
+    /// The targets "what do I need?" solves for: each letter's cutoff above 0,
+    /// highest first, then the course's own `target` if it has one.
+    pub fn targets(&self) -> Vec<f64> {
+        let mut targets: Vec<f64> = (self.scale.cutoffs().into_iter())
+            .map(|(_, min)| min)
+            .filter(|&min| min > 0.0)
+            .collect();
+        targets.sort_by(|a, b| b.partial_cmp(a).unwrap_or(Ordering::Equal));
+        targets.extend(self.target);
+        targets
+    }
+
+    /// Grade the course in place (see [`Course::grade`]) and also solve "what
+    /// do I need?": fills in `remaining`, `best` and `needs` for
+    /// [`Course::targets`].
+    pub fn evaluate(&mut self) {
+        let (best, needs) = self.solve(&self.targets());
+        self.remaining = Some(self.remaining_count());
+        self.best = best;
+        self.needs = Some(needs);
+        self.grade();
+    }
+
+    /// An evaluated copy of the course (see [`Course::evaluate`]).
+    pub fn evaluated(&self) -> Course {
+        let mut c = self.clone();
+        c.evaluate();
+        c
+    }
+
     /// Average score (as a fraction of points) needed on every remaining item
-    /// to finish at or above `target` percent. "Impossible" means even 100%
-    /// everywhere falls short.
-    pub fn needed_on_remaining(&self, target: f64) -> Needed {
-        let mut needs = self.needs(&[target]);
-        needs.pop().unwrap_or(Needed::NoRemaining)
+    /// to finish at or above `target` percent: `Some(0.0)` when it's already
+    /// secured, `None` when even full marks fall short.
+    pub fn needed_on_remaining(&self, target: f64) -> Option<f64> {
+        self.needs(&[target]).pop().flatten()
     }
 
     /// [`Course::needed_on_remaining`] for several targets at once, sharing
     /// the work between them. One result per target, in the same order.
-    pub fn needs(&self, targets: &[f64]) -> Vec<Needed> {
-        let Some(mut solver) = Solver::new(self) else {
-            return vec![Needed::NoRemaining; targets.len()];
-        };
-        let at_zero = solver.percent_at(0.0);
-        let at_full = solver.percent_at(1.0);
-        targets
-            .iter()
-            .map(|&target| {
-                // The tolerance lets 89.99999999 from floating point count as 90.
-                let goal = target - TOLERANCE;
-                if at_zero >= goal {
-                    Needed::Secured
-                } else if at_full < goal {
-                    Needed::Impossible {
-                        best: Some(at_full),
-                    }
-                } else if solver.linear {
-                    Needed::Needs {
-                        fraction: ((goal - at_zero) / (at_full - at_zero)).clamp(0.0, 1.0),
-                    }
-                } else {
-                    // The smallest fraction that reaches the goal (the grade
-                    // never falls as the fraction rises).
-                    let (mut lo, mut hi) = (0.0, 1.0);
-                    for _ in 0..BISECTION_STEPS {
-                        let mid = (lo + hi) / 2.0;
-                        if solver.percent_at(mid) >= goal {
-                            hi = mid;
-                        } else {
-                            lo = mid;
-                        }
-                    }
-                    Needed::Needs { fraction: hi }
-                }
+    pub fn needs(&self, targets: &[f64]) -> Vec<Option<f64>> {
+        self.solve(targets).1
+    }
+
+    /// The best grade still possible, and [`Course::needs`] for `targets`.
+    ///
+    /// Only the categories with remaining work change with the score given
+    /// to it, so the solver grades one working copy of the course and then
+    /// regrades only those. If none of them has drop rules, the grade is a
+    /// straight line in that score (each such category's percentage is
+    /// `(earned + fraction · remaining) / possible`, with a fixed `possible`
+    /// and a fixed set of graded categories), so it's solved exactly from the
+    /// grades at 0% and 100%. Otherwise it bisects; the grade never falls as
+    /// the score rises.
+    fn solve(&self, targets: &[f64]) -> (Option<f64>, Vec<Option<f64>>) {
+        // Each category with remaining work, and the indexes of those items.
+        let affected: Vec<(usize, Vec<usize>)> = (self.categories.iter().enumerate())
+            .filter_map(|(c, category)| {
+                let items: Vec<usize> = (category.items.iter().enumerate())
+                    .filter(|(_, item)| is_remaining(item))
+                    .map(|(i, _)| i)
+                    .collect();
+                (!items.is_empty()).then_some((c, items))
             })
-            .collect()
+            .collect();
+
+        let mut course = self.clone();
+        course.categories.iter_mut().for_each(Category::grade);
+        let linear = !(affected.iter()).any(|&(c, _)| course.categories[c].has_drop_rules());
+        // Course percentage with every remaining item at `fraction` of its points.
+        let mut percent_at = |fraction: f64| -> Option<f64> {
+            for (c, items) in &affected {
+                let category = &mut course.categories[*c];
+                for &i in items {
+                    let item = &mut category.items[i];
+                    item.earned_points = Some(item.total_points * fraction);
+                }
+                category.grade();
+            }
+            let (earned, possible) = course.totals();
+            (possible > 0.0).then(|| earned / possible * 100.0)
+        };
+
+        let at_zero = percent_at(0.0).unwrap_or(0.0);
+        let best = percent_at(1.0);
+        let at_full = best.unwrap_or(0.0);
+        let mut needs = Vec::with_capacity(targets.len());
+        for &target in targets {
+            // The tolerance lets 89.99999999 from floating point count as 90.
+            let goal = target - TOLERANCE;
+            needs.push(if at_zero >= goal {
+                Some(0.0)
+            } else if at_full < goal {
+                None
+            } else if linear {
+                Some(((goal - at_zero) / (at_full - at_zero)).clamp(0.0, 1.0))
+            } else {
+                // The smallest fraction that reaches the goal.
+                let (mut lo, mut hi) = (0.0, 1.0);
+                for _ in 0..BISECTION_STEPS {
+                    let mid = (lo + hi) / 2.0;
+                    if percent_at(mid).unwrap_or(0.0) >= goal {
+                        hi = mid;
+                    } else {
+                        lo = mid;
+                    }
+                }
+                Some(hi)
+            });
+        }
+        (best, needs)
     }
 }
 
@@ -230,71 +298,6 @@ const TOLERANCE: f64 = 1e-9;
 /// Halvings of [0, 1] when solving with drop rules: 2⁻⁴⁰ ≈ 1e-12, far below
 /// anything displayed.
 const BISECTION_STEPS: u32 = 40;
-
-/// The course's grade as a function of the fraction scored on the remaining
-/// work, for [`Course::needs`]. Only the categories with remaining work change
-/// with the fraction, so only they are regraded.
-struct Solver {
-    /// Working copy of the course, every category graded.
-    course: Course,
-    /// Each category with remaining work, and the indexes of those items.
-    affected: Vec<(usize, Vec<usize>)>,
-    /// No affected category has drop rules, so the grade is linear in the
-    /// fraction: each affected category's percentage is
-    /// `(earned + fraction · remaining) / possible` with a fixed `possible`,
-    /// and the set of graded categories doesn't change.
-    linear: bool,
-}
-
-impl Solver {
-    /// `None` when nothing is left to grade.
-    fn new(course: &Course) -> Option<Solver> {
-        let affected: Vec<(usize, Vec<usize>)> = course
-            .categories
-            .iter()
-            .enumerate()
-            .filter_map(|(c, category)| {
-                let items: Vec<usize> = (category.items.iter().enumerate())
-                    .filter(|(_, item)| is_remaining(item))
-                    .map(|(i, _)| i)
-                    .collect();
-                (!items.is_empty()).then_some((c, items))
-            })
-            .collect();
-        if affected.is_empty() {
-            return None;
-        }
-        let linear = !affected
-            .iter()
-            .any(|&(c, _)| course.categories[c].has_drop_rules());
-        let mut course = course.clone();
-        course.categories.iter_mut().for_each(Category::grade);
-        Some(Solver {
-            course,
-            affected,
-            linear,
-        })
-    }
-
-    /// Course percentage (0 when undefined) with every remaining item scored at
-    /// `fraction` of its points.
-    fn percent_at(&mut self, fraction: f64) -> f64 {
-        for (c, items) in &self.affected {
-            let category = &mut self.course.categories[*c];
-            for &i in items {
-                let item = &mut category.items[i];
-                item.earned_points = Some(item.total_points * fraction);
-            }
-            category.grade();
-        }
-        let (earned, possible) = self.course.totals();
-        if possible > 0.0 {
-            earned / possible * 100.0
-        } else {
-            0.0
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests;

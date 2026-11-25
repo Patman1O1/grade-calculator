@@ -20,6 +20,8 @@ export interface Course {
   /** Decimal places the course's own gradebook shows for percentages. */
   displayDecimals?: number
   notes?: string
+  /** The user's own target percentage for "what do I need?", solved after the letter cutoffs. */
+  target?: number
 
   /** Computed: points scheme, totals across categories; weighted scheme, weighted points. */
   earned?: number
@@ -29,14 +31,19 @@ export interface Course {
   percent?: number
   /** Computed. */
   letter?: string
-}
 
-/** Average needed on the remaining work to reach a target (from `engine.evaluate`). */
-export type Needed =
-  | { kind: 'no-remaining' }
-  | { kind: 'secured' }
-  | { kind: 'impossible'; best: number | null }
-  | { kind: 'needs'; fraction: number }
+  /** Computed by `engine.evaluate`: items still to be graded. */
+  remaining?: number
+  /** Computed by `engine.evaluate`: the grade with full marks on all remaining work; absent if undefined. */
+  best?: number
+  /**
+   * Computed by `engine.evaluate`, one per letter in `letterTargets` order and
+   * then one for `target` if set: the average needed on the remaining work as
+   * a fraction of its points (0 when already secured), or null when out of
+   * reach even with full marks.
+   */
+  needs?: (number | null)[]
+}
 
 /** A course as the engine returns it: no ids (ids belong to the front-end). */
 export type EngineCourse = Omit<Course, 'id' | 'categories'> & { categories: EngineCategory[] }
@@ -44,13 +51,6 @@ export type EngineCourse = Omit<Course, 'id' | 'categories'> & { categories: Eng
 /** Give a course from the engine, and everything in it, new ids. */
 export function withIds(course: EngineCourse): Course {
   return { id: newId('course'), ...course, categories: course.categories.map(withCategoryIds) }
-}
-
-/** A course's overall grade, for the course picker (from `engine.summaries`, in course order). */
-export interface CourseSummary {
-  /** Overall percentage, or null when nothing is graded. */
-  percent: number | null
-  letter: string | null
 }
 
 /** Edit the selected course: `fn` receives a draft copy to change in place. */
@@ -61,17 +61,11 @@ export function decimals(course: Course): number {
   return course.displayDecimals ?? 2
 }
 
-/** Letters with a minimum above 0, highest first: the targets worth solving for. */
+/** Letters with a minimum above 0, highest first: the targets the engine solves for, before `target`. */
 export function letterTargets(course: Course): Cutoff[] {
   return cutoffs(course.scale)
     .filter((c) => c.min > 0)
     .sort((a, b) => b.min - a.min)
-}
-
-/** Target percentages for `engine.evaluate`: each letter's minimum, then `custom` if set. */
-export function targets(course: Course, custom: number | null): number[] {
-  const letters = letterTargets(course).map((c) => c.min)
-  return custom === null ? letters : [...letters, custom]
 }
 
 /** Sum of the weights of the non-extra-credit categories. */
@@ -89,9 +83,9 @@ export function updateCourse(courses: Course[], id: string, fn: (draft: Course) 
   })
 }
 
-/** Each course's overall percentage by course id, for the course picker. `summaries` is in course order. */
-export function percentsById(courses: Course[], summaries: CourseSummary[]): Map<string, number | null> {
-  return new Map(courses.map((c, i) => [c.id, summaries[i]?.percent ?? null]))
+/** Each course's overall percentage by course id, for the course picker. `percents` is in course order. */
+export function percentsById(courses: Course[], percents: (number | null)[]): Map<string, number | null> {
+  return new Map(courses.map((c, i) => [c.id, percents[i] ?? null]))
 }
 
 /** File name for exporting a course as JSON ("CS-411-Artificial-Intelligence.json"). */
@@ -99,17 +93,10 @@ export function exportFileName(course: Course): string {
   return `${course.name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'course'}.json`
 }
 
-/** Human-readable "what do I need?" result. */
-export function describeNeed(need: Needed | undefined): string {
-  if (!need) return '…'
-  switch (need.kind) {
-    case 'no-remaining':
-      return 'nothing left to grade'
-    case 'secured':
-      return 'secured'
-    case 'impossible':
-      return need.best === null ? 'out of reach' : `out of reach (max ${formatPercent(need.best, 2)})`
-    case 'needs':
-      return `${round(need.fraction * 100, 1)}% avg`
-  }
+/** Human-readable "what do I need?" result for one target; `best` is the graded course's `best`. */
+export function describeNeed(need: number | null | undefined, best: number | undefined): string {
+  if (need === undefined) return '…'
+  if (need === null) return best === undefined ? 'out of reach' : `out of reach (max ${formatPercent(best, 2)})`
+  if (need === 0) return 'secured'
+  return `${round(need * 100, 1)}% avg`
 }

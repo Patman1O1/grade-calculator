@@ -98,22 +98,44 @@ fn finds_the_average_needed_on_remaining_work() {
         Scheme::Points,
         vec![cat(0.0, vec![item(Some(60.0), 100.0), item(None, 100.0)])],
     );
-    match c.needed_on_remaining(80.0) {
-        Needed::Needs { fraction } => assert!((fraction - 1.0).abs() < 1e-6),
-        other => panic!("expected needs, got {other:?}"),
-    }
-    assert!(matches!(c.needed_on_remaining(70.0), Needed::Needs { .. }));
-    assert!(matches!(
-        c.needed_on_remaining(81.0),
-        Needed::Impossible { .. }
-    ));
-    assert_eq!(c.needed_on_remaining(30.0), Needed::Secured);
+    let fraction = c.needed_on_remaining(80.0).unwrap();
+    assert!((fraction - 1.0).abs() < 1e-6);
+    assert!(c.needed_on_remaining(70.0).is_some_and(|f| f > 0.0));
+    // Out of reach, and already secured.
+    assert_eq!(c.needed_on_remaining(81.0), None);
+    assert_eq!(c.needed_on_remaining(30.0), Some(0.0));
+}
 
+#[test]
+fn evaluate_solves_for_the_letters_and_the_courses_own_target() {
+    let mut c = course(
+        Scheme::Points,
+        vec![cat(0.0, vec![item(Some(60.0), 100.0), item(None, 100.0)])],
+    );
+    c.target = Some(75.0);
+    assert_eq!(c.targets(), [90.0, 80.0, 70.0, 60.0, 75.0]);
+
+    let r = c.evaluated();
+    assert_eq!(r.percent, Some(60.0));
+    assert_eq!(r.remaining, Some(1));
+    assert_eq!(r.best, Some(80.0));
+    let needs = r.needs.unwrap();
+    assert_eq!(needs.len(), 5);
+    assert_eq!(needs[0], None); // A: out of reach
+    assert!((needs[1].unwrap() - 1.0).abs() < 1e-6); // B: 100/100
+    assert!((needs[2].unwrap() - 0.8).abs() < 1e-6); // C: 80/100
+    assert!((needs[3].unwrap() - 0.6).abs() < 1e-6); // D: 60/100
+    assert!((needs[4].unwrap() - 0.9).abs() < 1e-6); // 75%: 90/100
+
+    // Nothing left: each target is either already reached or out of reach.
     let done = course(
         Scheme::Points,
         vec![cat(0.0, vec![item(Some(60.0), 100.0)])],
     );
-    assert_eq!(done.needed_on_remaining(80.0), Needed::NoRemaining);
+    let r = done.evaluated();
+    assert_eq!(r.remaining, Some(0));
+    assert_eq!(r.best, Some(60.0));
+    assert_eq!(r.needs.unwrap(), [None, None, None, Some(0.0)]);
 }
 
 /// Course percentage with every remaining item at `fraction` of its points.
@@ -128,9 +150,7 @@ fn solves_without_drop_rules_exactly() {
         Scheme::Points,
         vec![cat(0.0, vec![item(Some(60.0), 100.0), item(None, 100.0)])],
     );
-    let Needed::Needs { fraction } = c.needed_on_remaining(70.0) else {
-        panic!("expected needs")
-    };
+    let fraction = c.needed_on_remaining(70.0).unwrap();
     assert!((fraction - 0.8).abs() < 1e-9);
 }
 
@@ -155,8 +175,8 @@ fn solves_with_drop_rules_for_several_targets() {
     assert_eq!(needs.len(), targets.len());
     for (&target, need) in targets.iter().zip(&needs) {
         assert_eq!(*need, c.needed_on_remaining(target));
-        let Needed::Needs { fraction } = *need else {
-            panic!("expected needs for {target}, got {need:?}")
+        let Some(fraction) = *need else {
+            panic!("expected a fraction for {target}, got {need:?}")
         };
         // The smallest fraction that reaches the target.
         assert!(percent_at(&c, fraction) + 1e-9 >= target);

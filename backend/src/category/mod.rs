@@ -105,12 +105,13 @@ impl Category {
         let min_keep = if fixed_count > 0 { 0 } else { 1 };
 
         let mut scratch = Vec::with_capacity(pool.len());
-        for (drops, mode) in [(drop_lowest, Mode::Max), (drop_highest, Mode::Min)] {
+        // Drop-lowest keeps the best set (maximises), drop-highest the worst.
+        for (drops, maximise) in [(drop_lowest, true), (drop_highest, false)] {
             let drops = drops.min(pool.len().saturating_sub(min_keep));
             if drops > 0 {
                 let keep = pool.len() - drops;
                 let fixed = (fixed_earned, fixed_possible);
-                choose_kept(&self.items, &mut pool, keep, fixed, mode, &mut scratch);
+                choose_kept(&self.items, &mut pool, keep, fixed, maximise, &mut scratch);
             }
         }
 
@@ -137,17 +138,10 @@ fn drop_count(n: Option<f64>) -> usize {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    /// Keep the set with the highest ratio (i.e. drop the lowest).
-    Max,
-    /// Keep the set with the lowest ratio (i.e. drop the highest).
-    Min,
-}
-
 /// Narrow `pool` (indexes into `items`) to the `keep` items whose
 /// `(fixed_earned + Σ earned) / (fixed_possible + Σ possible)` is the highest
-/// ([`Mode::Max`]) or lowest ([`Mode::Min`]), leaving them in ascending order.
+/// (`maximise`, for drop-lowest) or lowest (for drop-highest), leaving them in
+/// ascending order.
 ///
 /// When items are worth different amounts, "drop the lowest percentage" is not
 /// always optimal. For a ratio q, the best set is the `keep` items with the
@@ -164,7 +158,7 @@ fn choose_kept(
     pool: &mut Vec<usize>,
     keep: usize,
     (fixed_earned, fixed_possible): (f64, f64),
-    mode: Mode,
+    maximise: bool,
     scratch: &mut Vec<(usize, f64)>,
 ) {
     if keep >= pool.len() {
@@ -175,7 +169,7 @@ fn choose_kept(
         return;
     }
 
-    let sign = if mode == Mode::Max { 1.0 } else { -1.0 };
+    let sign = if maximise { 1.0 } else { -1.0 };
     // The `keep` best items for ratio q (largest `sign·(earned − q·possible)`
     // first, ties keeping the earlier item), with their total points.
     let mut pick = |q: f64, picked: &mut Vec<usize>| -> (f64, f64) {
@@ -217,15 +211,17 @@ fn choose_kept(
             // Only zero-point items picked, so the ratio is undefined: take the
             // set if it's the first, or if it earned points while maximising
             // (an unbeatable ratio), and stop.
-            if round == 0 || (mode == Mode::Max && earned > 0.0) {
+            if round == 0 || (maximise && earned > 0.0) {
                 std::mem::swap(&mut best, &mut next);
             }
             break;
         }
         let ratio = earned / possible;
-        let improved = match mode {
-            Mode::Max => ratio > q + 1e-12 * q.abs().max(1.0),
-            Mode::Min => ratio < q - 1e-12 * q.abs().max(1.0),
+        let slack = 1e-12 * q.abs().max(1.0);
+        let improved = if maximise {
+            ratio > q + slack
+        } else {
+            ratio < q - slack
         };
         if round > 0 && !improved {
             break;
@@ -243,9 +239,10 @@ fn choose_kept(
     if possible > 0.0 {
         let ratio = earned / possible;
         let slack = 1e-12 * q.abs().max(1.0);
-        let reaches = match mode {
-            Mode::Max => ratio >= q - slack,
-            Mode::Min => ratio <= q + slack,
+        let reaches = if maximise {
+            ratio >= q - slack
+        } else {
+            ratio <= q + slack
         };
         if reaches {
             std::mem::swap(&mut best, &mut next);
